@@ -2,5 +2,8 @@
 *.mkv
 *.mp4
 *.csv
+
+# Python
 *.xml
 *.db3
+__pycache__
