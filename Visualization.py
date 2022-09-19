@@ -118,7 +118,7 @@ class MyWidget(QtWidgets.QWidget):
 
 
     def databaseButtonClicked(self):
-        db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
+        db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
         if(db_file_path == ''):
             return
         try:
@@ -173,7 +173,7 @@ class MyWidget(QtWidgets.QWidget):
 
         start = time.time()
 
-        VID_SCALE = 2  # INCREASING THIS CAN CAUSE MEMORY ISSUES.
+        VID_SCALE = 1  # INCREASING THIS CAN CAUSE MEMORY ISSUES.
                        # A 1:41 minute video will use over
                        # 100 GB of RAM if scale is above 3
 
