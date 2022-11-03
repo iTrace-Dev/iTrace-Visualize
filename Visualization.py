@@ -173,26 +173,24 @@ class MyWidget(QtWidgets.QWidget):
 
         start = time.time()
 
-        VID_SCALE = 1  # INCREASING THIS CAN CAUSE MEMORY ISSUES.
-                       # A 1:41 minute video will use over
-                       # 100 GB of RAM if scale is above 3
+
 
         # Get Array of Frames
-        t = time.time()
-        print("Gathering Frames, ",end="")
-        frames = {}
-        stamp = self.session_start_time
-        step = (1 / self.video.get(cv2.CAP_PROP_FPS)) * 1000
-        while True:
-            ret, img = self.video.read()
-            if ret:
-                frames[stamp] = img
-                for i in range(VID_SCALE-1):
-                    frames[stamp+((step/VID_SCALE)*(i+1))] = img.copy()
-                stamp += step
-            else:
-                break
-        print("Len:",len(frames),"Elapsed:",time.time()-t)
+        #t = time.time()
+        #print("Gathering Frames, ",end="")
+        #frames = {}
+        #stamp = self.session_start_time
+        #step = (1 / self.video.get(cv2.CAP_PROP_FPS)) * 1000
+        #while True:
+        #    ret, img = self.video.read()
+        #    if ret:
+        #        frames[stamp] = img
+        #        for i in range(VID_SCALE-1):
+        #            frames[stamp+((step/VID_SCALE)*(i+1))] = img.copy()
+        #        stamp += step
+        #    else:
+        #        break
+        #print("Len:",len(frames),"Elapsed:",time.time()-t)
 
         t = time.time()
         print("Gathering Gazes, ",end="")
@@ -226,7 +224,7 @@ class MyWidget(QtWidgets.QWidget):
             print("Len:",len(saccades),"Elapsed:",time.time()-t)
 
 
-        self.outputVideo(video_frames=frames, gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades)
+        self.outputVideo(gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades)
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
@@ -235,14 +233,128 @@ class MyWidget(QtWidgets.QWidget):
         return abs(self.selected_session_time - self.loaded_video_time) < 1
 
     # Creates the output video given the input parameters:
-        # video_frames - Dictionary of cv2 frames, mapped to thier video timestamp - REQUIRED
+
         # gazes - List of Gazes - REQUIRED
         # fixations - List of Fixations
         # fixation_gazes - Dictionary of fixation_ids to fixation_gazes
         # saccades - List of list of gazes making up a Saccade
         # replay data - List of mouse and keyboard inputs
         # archive_data - XML data of the srcML Archive File
-    def outputVideo(self, video_frames, gazes, fixations=None, fixation_gazes = None, saccades=None, replay_data=None, archive_data=None):
+    def outputVideo(self, gazes, fixations=None, fixation_gazes = None, saccades=None, replay_data=None, archive_data=None):
+
+        VID_SCALE = 1  # INCREASING THIS CAN CAUSE MEMORY ISSUES.
+                       # A 1:41 minute video will use over
+                       # 100 GB of RAM if scale is above 3
+
+        print("Writing Video")
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        video_out = cv2.VideoWriter("output.mp4", fourcc, self.video_fps, (self.video_width, self.video_height))
+
+        video_len = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT)) * VID_SCALE
+
+        stamp = self.session_start_time
+        step = (1 / self.video.get(cv2.CAP_PROP_FPS)) * 1000
+
+        current_gaze = 0
+        current_fixation = 0 if len(fixations) != 0 else -1
+        current_saccade = 0 if len(saccades) != 0 else -1
+
+        count = 0
+        write_loop_time = time.time()
+        while True:
+            if time.time() - write_loop_time > 15:
+                write_loop_time = time.time()
+                print(f'{round(count/video_len*100,2)}%')
+
+            ret, img = self.video.read()
+            if ret:
+
+                for i in range(VID_SCALE):
+                    use_stamp = stamp+((step/VID_SCALE)*(i))
+                    use_img = img.copy()
+                    # Draw Fixations
+                    if current_fixation != -1:
+                        current_fixation = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes)
+                    # Draw Saccades
+                    if current_saccade != -1:
+                        current_saccade = self.draw_saccade(use_img, use_stamp, current_saccade, saccades)
+                    # Draw Gazes
+                    if current_gaze != -1:
+                        current_gaze = self.draw_gaze(use_img, use_stamp, current_gaze, gazes)
+
+                    video_out.write(use_img)
+                    count += 1
+
+                stamp += step
+            else:
+                break
+
+
+
+        video_out.release()
+
+
+    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes):
+        if current_fixation < len(fixations):
+            check_fix = fixations[current_fixation]
+            check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
+            while check_fix_time <= timestamp:
+                current_fixation += 1
+                check_fix = fixations[current_fixation]
+                check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
+            # Check if too early to draw
+            if ConvertWindowsTime(check_fix.fixation_start_event_time) <= timestamp:
+                # Draw Fixation Gazes first if wanted
+                if fixation_gazes is not None:
+                    for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
+                        gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
+                        try:
+                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
+                        except ValueError:
+                            pass
+                # Then draw Fixation
+                try:
+                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
+                except ValueError:
+                    pass
+            return current_fixation
+        else:
+            return -1
+
+    def draw_gaze(self, frame, timestamp, current_gaze, gazes): # returns the next gaze number
+        if current_gaze < len(gazes):
+            check_gaze = gazes[current_gaze]
+            check_gaze_time = check_gaze.system_time
+            while check_gaze_time <= timestamp:
+                current_gaze += 1
+                check_gaze = gazes[current_gaze]
+                check_gaze_time = check_gaze.system_time
+            try:
+                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2)
+            except ValueError:
+                pass
+            return current_gaze
+        else:
+            return -1
+
+    def draw_saccade(self, frame, timestamp, current_saccade, saccades):
+        if current_saccade < len(saccades):
+            check_saccade = saccades[current_saccade]
+            check_saccade_time = check_saccade[-1].system_time
+            while check_saccade_time <= timestamp:
+                current_saccade += 1
+                check_saccade = saccades[current_saccade]
+                check_saccade_time = check_saccade[-1].system_time
+            if check_saccade[0].system_time <= timestamp:
+                for i in range(len(check_saccade)-1):
+                    cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), (255,255,255), 2)
+            return current_saccade
+        else:
+            return -1
+
+
+    def __HOLDER__(self):
+
         keys = list(video_frames.keys())
 
         current_frame = 0
@@ -257,26 +369,6 @@ class MyWidget(QtWidgets.QWidget):
             if(time.time() - loop_time >= 15):
                 print(f'{current_frame / len(keys) * 100}%')
                 loop_time = time.time()
-            #Fixations
-            if current_fixation < len(fixations):
-                check_fix = fixations[current_fixation]
-                check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
-                while check_fix_time <= current_frame_time:
-                    current_fixation += 1
-                    check_fix = fixations[current_fixation]
-                    check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
-                try:
-                    cv2.circle(video_frames[keys[current_frame]], (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
-                    if fixation_gazes is not None:
-                        for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
-                            gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
-                            try:
-                                cv2.circle(video_frames[keys[current_frame]], (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
-                            except ValueError:
-                                pass
-                except ValueError:
-                    pass
-                    #print("Fixation",current_fix,"is NaN")
 
             #Saccades
             if saccades is not None and current_saccade < len(saccades):
@@ -309,12 +401,7 @@ class MyWidget(QtWidgets.QWidget):
 
 
 
-        print("Writing Video")
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        video_out = cv2.VideoWriter("output.mp4", fourcc, self.video_fps, (self.video_width, self.video_height))
-        for stamp in video_frames:
-            video_out.write(video_frames[stamp])
-        video_out.release()
+
 
 
 if __name__ == "__main__":
