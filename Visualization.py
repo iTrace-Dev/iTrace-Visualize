@@ -8,11 +8,13 @@ from PySide6 import QtCore, QtWidgets, QtGui
 
 WIN_WIDTH, WIN_HEIGHT = 800, 600
 
-
-def ConvertWindowsTime(t):
+# Converts windows time to Unix time
+def ConvertWindowsTime(t) -> int:
     return ((t / 10000000) - 11644473600) * 1000
 
-def GetSaccadesOfGazesAndFixationGazes(idb,gazes,fixation_gazes):
+# Takes the list of Fixations and Gazes and figures out the saccades
+# Saccades are defined as the group of gazes between two consecutive fixations
+def GetSaccadesOfGazesAndFixationGazes(idb,gazes,fixation_gazes) -> list[list[Gaze]]:
     fix_gaze_times = []
     for fix_id in fixation_gazes:
         for fixation_gaze in fixation_gazes[fix_id]:
@@ -117,7 +119,7 @@ class MyWidget(QtWidgets.QWidget):
         self.start_video_button.clicked.connect(self.startVideoClicked)
 
 
-    def databaseButtonClicked(self):
+    def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
         if(db_file_path == ''):
             return
@@ -130,7 +132,7 @@ class MyWidget(QtWidgets.QWidget):
         self.session_list.clear()
         self.session_list.addItems(self.idb.GetSessions())
 
-    def sessionLoadClicked(self, item):
+    def sessionLoadClicked(self, item):  # Select Session
         session_id = int(item.text().split(" - ")[1])
 
         self.fixation_runs_list.clear()
@@ -139,16 +141,16 @@ class MyWidget(QtWidgets.QWidget):
         self.selected_session_time = self.idb.GetSessionTimeLength(session_id)
         self.session_start_time = self.idb.GetSessionStartTime(session_id)
 
-    def fixationRunClicked(self, item):
+    def fixationRunClicked(self, item):  # Select Fixation (Doesn't currently do anything extra)
         pass
 
-    def videoLoadClicked(self):
+    def videoLoadClicked(self): # Load Video
         video_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "Video Files (*.flv *.mp4 *.mov *.mkv);;All Files (*.*)")[0]
         if(video_file_path == ''):
             return
 
         self.video = cv2.VideoCapture(video_file_path)
-        if(not self.video.isOpened()):
+        if(not self.video.isOpened()):  # Starts to draw on the video
             QtWidgets.QMessageBox.critical(self, "Error", "Error loading video file")
             self.video = None
             return
