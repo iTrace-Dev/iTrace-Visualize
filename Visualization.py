@@ -118,6 +118,13 @@ class MyWidget(QtWidgets.QWidget):
         self.start_video_button.move(675, 750)
         self.start_video_button.clicked.connect(self.startVideoClicked)
 
+        # Load color picker button
+        self.video_load_button = QtWidgets.QPushButton("Choose color", self)
+        self.video_load_button.move(50, 175)
+        self.video_load_button.clicked.connect(self.videoLoadClicked)
+        self.video_loaded_text = QtWidgets.QLabel("Default color selected", self)
+        self.video_loaded_text.move(50, 200)
+
 
     def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
@@ -229,6 +236,11 @@ class MyWidget(QtWidgets.QWidget):
         self.outputVideo(gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades)
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
+
+
+    # need to be implemented, to pick color option
+    def colorPickerClicked(self):
+
 
     # Returns true if the session time and video time are within a second of each other
     def doSessionVideoTimesMatch(self):
