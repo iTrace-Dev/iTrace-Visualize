@@ -240,6 +240,7 @@ class MyWidget(QtWidgets.QWidget):
 
     # need to be implemented, to pick color option
     def colorPickerClicked(self):
+        return
 
 
     # Returns true if the session time and video time are within a second of each other
