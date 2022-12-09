@@ -127,14 +127,14 @@ class MyWidget(QtWidgets.QWidget):
         # Load color picker button
         self.color_picker_button = QtWidgets.QPushButton("Choose color", self)
         self.color_picker_button.move(50, 175)
-        self.color_picker_button.clicked.connect(self.colorPickerClicked(0))
+        self.color_picker_button.clicked.connect(self.gazePickerClicked)
         self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
         self.color_picker_text.move(50, 200)
 
         # Load color picker button
         self.color_picker_button = QtWidgets.QPushButton("Choose color", self)
         self.color_picker_button.move(50, 225)
-        self.color_picker_button.clicked.connect(self.colorPickerClicked(1))
+        self.color_picker_button.clicked.connect(self.saccadePickerClicked)
         self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
         self.color_picker_text.move(50, 250)
 
@@ -250,16 +250,28 @@ class MyWidget(QtWidgets.QWidget):
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
 
-    def colorPickerClicked(self): # Show color picker dialog/save color option
+    def gazePickerClicked(self): # Show color picker dialog/save color option
         dialog = QtWidgets.QColorDialog(self)
-        if self.color:
-            dialog.setCurrentColor(QtGui.QColor(self.color))
+        if self.gazeColor:
+            dialog.setCurrentColor(QtGui.QColor(self.gazeColor))
         if dialog.exec():
             self.setColor(dialog.currentColor().name())
 
-    def setColor(self, color): # Sets color option
-        if color != self.color:
-            self.color = color
+    def setGazeColor(self, color): # Sets color option
+        if color != self.gazeColor:
+            self.gazeColor = color
+           # self.colorChanged.emit(color)
+
+    def saccadePickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.saccadeColor:
+            dialog.setCurrentColor(QtGui.QColor(self.saccadeColor))
+        if dialog.exec():
+            self.setColor(dialog.currentColor().name())
+
+    def setSaccadeColor(self, color): # Sets color option
+        if color != self.saccadeColor:
+            self.saccadeColor = color
            # self.colorChanged.emit(color)
 
     # Returns true if the session time and video time are within a second of each other
