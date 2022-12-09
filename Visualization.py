@@ -355,7 +355,7 @@ class MyWidget(QtWidgets.QWidget):
                     for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
                         gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
                         try:
-                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2) # change color
+                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2) # fixation color
                         except ValueError:
                             pass
                 # Then draw Fixation
