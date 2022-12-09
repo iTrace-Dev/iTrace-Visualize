@@ -78,7 +78,8 @@ class MyWidget(QtWidgets.QWidget):
         self.video_height = 0
 
         # Color variables
-        self.color = None
+        self.gazeColor = None
+        self.saccadeColor = None
 
         # Load DB Button
         self.db_load_button = QtWidgets.QPushButton("Select Database", self)
@@ -126,10 +127,16 @@ class MyWidget(QtWidgets.QWidget):
         # Load color picker button
         self.color_picker_button = QtWidgets.QPushButton("Choose color", self)
         self.color_picker_button.move(50, 175)
-        self.color_picker_button.clicked.connect(self.colorPickerClicked)
+        self.color_picker_button.clicked.connect(self.colorPickerClicked(0))
         self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
         self.color_picker_text.move(50, 200)
 
+        # Load color picker button
+        self.color_picker_button = QtWidgets.QPushButton("Choose color", self)
+        self.color_picker_button.move(50, 225)
+        self.color_picker_button.clicked.connect(self.colorPickerClicked(1))
+        self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
+        self.color_picker_text.move(50, 250)
 
     def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
@@ -336,12 +343,12 @@ class MyWidget(QtWidgets.QWidget):
                     for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
                         gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
                         try:
-                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
+                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2) # change color
                         except ValueError:
                             pass
                 # Then draw Fixation
                 try:
-                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
+                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2) # change color
                 except ValueError:
                     pass
             return current_fixation
@@ -357,7 +364,7 @@ class MyWidget(QtWidgets.QWidget):
                 check_gaze = gazes[current_gaze]
                 check_gaze_time = check_gaze.system_time
             try:
-                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2)
+                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2) # change color
             except ValueError:
                 pass
             return current_gaze
@@ -418,65 +425,12 @@ class MyWidget(QtWidgets.QWidget):
                     check_gaze = gazes[current_gaze]
                     check_gaze_time = check_gaze.system_time
                 try:
-                    cv2.circle(video_frames[keys[current_frame]], (int(check_gaze.x), int(check_gaze.y)), 2, self.color, 2)
+                    cv2.circle(video_frames[keys[current_frame]], (int(check_gaze.x), int(check_gaze.y)), 2, (255,255,0), 2)
                 except ValueError:
                     pass
                     #print("Gaze",current_gaze,"is NaN")
 
             current_frame += 1
-
-#class ColorButton(QtWidgets.QPushButton):
-#    '''
-#    Custom Qt Widget to show a chosen color.
-
-#    Left-clicking the button shows the color-chooser, while
-#    right-clicking resets the color to None (no-color).
-#    '''
-
-#    colorChanged = pyqtSignal(object)
-
-#    def __init__(self, *args, color=None, **kwargs):
-#        super(ColorButton, self).__init__(*args, **kwargs)
-
-#        self._color = None
-#        self._default = color
-#        self.pressed.connect(self.onColorPicker)
-
-#        # Set the initial/default state.
-#        self.setColor(self._default)
-
-#    def setColor(self, color):
-#        if color != self._color:
-#            self._color = color
-#            self.colorChanged.emit(color)
-
-#        if self._color:
-#            self.setStyleSheet("background-color: %s;" % self._color)
-#        else:
-#            self.setStyleSheet("")
-
-#    def color(self):
-#        return self._color
-
-#    def onColorPicker(self):
-#        '''
-#        Show color-picker dialog to select color.
-
-#        Qt will use the native dialog by default.
-
-#        '''
-#        dlg = QtWidgets.QColorDialog(self)
-#        if self._color:
-#            dlg.setCurrentColor(QtGui.QColor(self._color))
-
-#        if dlg.exec_():
-#            self.setColor(dlg.currentColor().name())
-
-#    def mousePressEvent(self, e):
-#        if e.button() == Qt.RightButton:
-#            self.setColor(self._default)
-
-#        return super(ColorButton, self).mousePressEvent(e)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
