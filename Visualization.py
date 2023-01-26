@@ -124,19 +124,19 @@ class MyWidget(QtWidgets.QWidget):
         self.start_video_button.move(675, 750)
         self.start_video_button.clicked.connect(self.startVideoClicked)
 
-        # Load color picker button
-        self.color_picker_button = QtWidgets.QPushButton("Choose color", self)
-        self.color_picker_button.move(50, 175)
+        # Load Gaze Color Picker Button (moved left to align with saccade button)
+        self.color_picker_button = QtWidgets.QPushButton("Choose Gaze color", self)
+        self.color_picker_button.move(30, 175) 
         self.color_picker_button.clicked.connect(self.gazePickerClicked)
         self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
-        self.color_picker_text.move(50, 200)
+        self.color_picker_text.move(30, 200)
 
-        # Load color picker button
-        self.color_picker_button = QtWidgets.QPushButton("Choose color", self)
-        self.color_picker_button.move(50, 225)
+        # Load Saccade Color Picker Button (moved left to fit)
+        self.color_picker_button = QtWidgets.QPushButton("Choose Saccade color", self)
+        self.color_picker_button.move(30, 225)
         self.color_picker_button.clicked.connect(self.saccadePickerClicked)
         self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
-        self.color_picker_text.move(50, 250)
+        self.color_picker_text.move(30, 250)
 
     def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
