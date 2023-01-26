@@ -118,7 +118,6 @@ class MyWidget(QtWidgets.QWidget):
         self.start_video_button.move(675, 750)
         self.start_video_button.clicked.connect(self.startVideoClicked)
 
-
     def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
         if(db_file_path == ''):
@@ -399,12 +398,6 @@ class MyWidget(QtWidgets.QWidget):
                     #print("Gaze",current_gaze,"is NaN")
 
             current_frame += 1
-
-
-
-
-
-
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
