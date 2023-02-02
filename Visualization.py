@@ -5,6 +5,7 @@ import time
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
 from PySide6 import QtCore, QtWidgets, QtGui
+# from PyQt5.QtCore import pyqtSignal
 
 WIN_WIDTH, WIN_HEIGHT = 800, 600
 
@@ -53,6 +54,7 @@ class ConfirmDialog(QtWidgets.QDialog):
 
 
 class MyWidget(QtWidgets.QWidget):
+
     def __init__(self):
         super().__init__()
 
@@ -74,6 +76,10 @@ class MyWidget(QtWidgets.QWidget):
         # Size variables
         self.video_width = 0
         self.video_height = 0
+
+        # Color variables
+        self.gazeColor = None
+        self.saccadeColor = None
 
         # Load DB Button
         self.db_load_button = QtWidgets.QPushButton("Select Database", self)
@@ -118,6 +124,19 @@ class MyWidget(QtWidgets.QWidget):
         self.start_video_button.move(675, 750)
         self.start_video_button.clicked.connect(self.startVideoClicked)
 
+        # Load Gaze Color Picker Button (moved left to align with saccade button)
+        self.color_picker_button = QtWidgets.QPushButton("Choose Gaze color", self)
+        self.color_picker_button.move(30, 175) 
+        self.color_picker_button.clicked.connect(self.gazePickerClicked)
+        self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
+        self.color_picker_text.move(30, 200)
+
+        # Load Saccade Color Picker Button (moved left to fit)
+        self.color_picker_button = QtWidgets.QPushButton("Choose Saccade color", self)
+        self.color_picker_button.move(30, 225)
+        self.color_picker_button.clicked.connect(self.saccadePickerClicked)
+        self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
+        self.color_picker_text.move(30, 250)
 
     def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
@@ -230,6 +249,31 @@ class MyWidget(QtWidgets.QWidget):
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
+
+    def gazePickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.gazeColor:
+            dialog.setCurrentColor(QtGui.QColor(self.gazeColor))
+        if dialog.exec():
+            self.setColor(dialog.currentColor().name())
+
+    def setGazeColor(self, color): # Sets color option
+        if color != self.gazeColor:
+            self.gazeColor = color
+           # self.colorChanged.emit(color)
+
+    def saccadePickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.saccadeColor:
+            dialog.setCurrentColor(QtGui.QColor(self.saccadeColor))
+        if dialog.exec():
+            self.setColor(dialog.currentColor().name())
+
+    def setSaccadeColor(self, color): # Sets color option
+        if color != self.saccadeColor:
+            self.saccadeColor = color
+           # self.colorChanged.emit(color)
+
     # Returns true if the session time and video time are within a second of each other
     def doSessionVideoTimesMatch(self):
         return abs(self.selected_session_time - self.loaded_video_time) < 1
@@ -311,12 +355,12 @@ class MyWidget(QtWidgets.QWidget):
                     for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
                         gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
                         try:
-                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
+                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2) # fixation color
                         except ValueError:
                             pass
                 # Then draw Fixation
                 try:
-                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
+                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2) # change color
                 except ValueError:
                     pass
             return current_fixation
@@ -332,7 +376,7 @@ class MyWidget(QtWidgets.QWidget):
                 check_gaze = gazes[current_gaze]
                 check_gaze_time = check_gaze.system_time
             try:
-                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2)
+                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2) # change color
             except ValueError:
                 pass
             return current_gaze
@@ -393,18 +437,12 @@ class MyWidget(QtWidgets.QWidget):
                     check_gaze = gazes[current_gaze]
                     check_gaze_time = check_gaze.system_time
                 try:
-                    cv2.circle(video_frames[keys[current_frame]], (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2)
+                    cv2.circle(video_frames[keys[current_frame]], (int(check_gaze.x), int(check_gaze.y)), 2, (255,255,0), 2)
                 except ValueError:
                     pass
                     #print("Gaze",current_gaze,"is NaN")
 
             current_frame += 1
-
-
-
-
-
-
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
