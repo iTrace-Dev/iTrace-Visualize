@@ -7,6 +7,7 @@ from EyeDataTypes import Gaze, Fixation
 from PySide6 import QtCore, QtWidgets, QtGui
 
 WIN_WIDTH, WIN_HEIGHT = 800, 600
+ROLLING_WIN_SIZE = 1000 #Size of rolling window in miliseconds
 
 # Converts windows time to Unix time
 def ConvertWindowsTime(t) -> int:
@@ -257,8 +258,9 @@ class MyWidget(QtWidgets.QWidget):
         step = (1 / self.video.get(cv2.CAP_PROP_FPS)) * 1000
 
         current_gaze = 0
+        begin_gaze_window = 0
         current_fixation = 0 if len(fixations) != 0 else -1
-        current_saccade = 0 if len(saccades) != 0 else -1
+        current_saccade = 0 if saccades != None and len(saccades) != 0 else -1
 
         count = 0
         write_loop_time = time.time()
@@ -281,7 +283,7 @@ class MyWidget(QtWidgets.QWidget):
                         current_saccade = self.draw_saccade(use_img, use_stamp, current_saccade, saccades)
                     # Draw Gazes
                     if current_gaze != -1:
-                        current_gaze = self.draw_gaze(use_img, use_stamp, current_gaze, gazes)
+                        current_gaze, begin_gaze_window = self.draw_gaze(use_img, use_stamp, current_gaze, gazes, begin_gaze_window)
 
                     video_out.write(use_img)
                     count += 1
@@ -322,21 +324,35 @@ class MyWidget(QtWidgets.QWidget):
         else:
             return -1
 
-    def draw_gaze(self, frame, timestamp, current_gaze, gazes): # returns the next gaze number
+    def draw_gaze(self, frame, timestamp, current_gaze, gazes, begin_gaze_window): # returns the next gaze number
+        begin_time_stamp = timestamp - ROLLING_WIN_SIZE
+        
         if current_gaze < len(gazes):
             check_gaze = gazes[current_gaze]
             check_gaze_time = check_gaze.system_time
+            
+            check_begin_gaze = gazes[begin_gaze_window]
+            check_begin_gaze_time = check_begin_gaze.system_time
+            
             while check_gaze_time <= timestamp:
                 current_gaze += 1
                 check_gaze = gazes[current_gaze]
                 check_gaze_time = check_gaze.system_time
-            try:
-                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2)
-            except ValueError:
-                pass
-            return current_gaze
+            
+            if begin_time_stamp > 0:
+                while check_begin_gaze_time <= begin_time_stamp: #loop until the begging gaze is within the timeframe of the rolling window
+                    begin_gaze_window += 1
+                    check_begin_gaze = gazes[begin_gaze_window]
+                    check_begin_gaze_time = check_begin_gaze.system_time
+            for i in gazes[begin_gaze_window: current_gaze+1]:
+                try:
+                    cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0), 2)
+                except ValueError:
+                    pass
+            
+            return current_gaze, begin_gaze_window
         else:
-            return -1
+            return -1, -1
 
     def draw_saccade(self, frame, timestamp, current_saccade, saccades):
         if current_saccade < len(saccades):
