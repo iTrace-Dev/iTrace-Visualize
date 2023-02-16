@@ -2,12 +2,16 @@
 import sys
 import cv2
 import time
+import numpy as np
+import math
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
 from PySide6 import QtCore, QtWidgets, QtGui
 
 WIN_WIDTH, WIN_HEIGHT = 800, 600
-ROLLING_WIN_SIZE = 1000 #Size of rolling window in miliseconds
+ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
+GAZE_RADIUS = 5
+
 
 # Converts windows time to Unix time
 def ConvertWindowsTime(t) -> int:
@@ -230,6 +234,12 @@ class MyWidget(QtWidgets.QWidget):
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
+    def draw_circle(self, frame, cx, cy, radius, b, g, r):
+        for x in range(cx-radius, cx+radius):
+            for y in range(cy-radius, cy+radius):
+                if math.dist([x, y], [cx, cy]) < radius and x >= 0 and y >= 0 and x < frame.shape[1] and y < frame.shape[0]:
+                    frame[y, x] = [b, g, r]
+
     # Returns true if the session time and video time are within a second of each other
     def doSessionVideoTimesMatch(self):
         return abs(self.selected_session_time - self.loaded_video_time) < 1
@@ -370,7 +380,8 @@ class MyWidget(QtWidgets.QWidget):
             
             for i in gazes[begin_gaze_window: current_gaze+1]:
                 try:
-                    cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0), 2)
+                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, 255, 255, 0)
+                    #cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
                 except ValueError:
                     pass
             
@@ -391,9 +402,8 @@ class MyWidget(QtWidgets.QWidget):
                     cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), (255,255,255), 2)
             return current_saccade
         else:
-            return -1
-
-
+            return -1    
+    
     def __HOLDER__(self):
 
         keys = list(video_frames.keys())
