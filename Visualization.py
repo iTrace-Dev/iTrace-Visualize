@@ -260,6 +260,7 @@ class MyWidget(QtWidgets.QWidget):
         current_gaze = 0
         begin_gaze_window = 0
         current_fixation = 0 if len(fixations) != 0 else -1
+        begin_fixation_window = current_fixation
         current_saccade = 0 if saccades != None and len(saccades) != 0 else -1
 
         count = 0
@@ -277,7 +278,7 @@ class MyWidget(QtWidgets.QWidget):
                     use_img = img.copy()
                     # Draw Fixations
                     if current_fixation != -1:
-                        current_fixation = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes)
+                        current_fixation, begin_fixation_window = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes, begin_fixation_window)
                     # Draw Saccades
                     if current_saccade != -1:
                         current_saccade = self.draw_saccade(use_img, use_stamp, current_saccade, saccades)
@@ -297,32 +298,54 @@ class MyWidget(QtWidgets.QWidget):
         video_out.release()
 
 
-    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes):
+    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes, begin_fixation_window):
+        begin_time_stamp = timestamp - ROLLING_WIN_SIZE
+
         if current_fixation < len(fixations):
             check_fix = fixations[current_fixation]
             check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
+
+            check_begin_fix = fixations[begin_fixation_window]
+            check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
+            # find the new current fixation to print
             while check_fix_time <= timestamp:
                 current_fixation += 1
                 check_fix = fixations[current_fixation]
                 check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
-            # Check if too early to draw
-            if ConvertWindowsTime(check_fix.fixation_start_event_time) <= timestamp:
-                # Draw Fixation Gazes first if wanted
-                if fixation_gazes is not None:
-                    for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
-                        gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
-                        try:
-                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
-                        except ValueError:
-                            pass
-                # Then draw Fixation
+            # Find the new beginning of rolling window:
+            if begin_time_stamp > 0:
+                while check_begin_fix_time <= begin_time_stamp:
+                    begin_fixation_window += 1
+                    check_begin_fix = fixations[begin_fixation_window]
+                    check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
+
+            # Draw fixations in the rolling window
+            for i in fixations[begin_fixation_window: current_fixation+1]:
                 try:
-                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
+                    cv2.circle(frame, (int(i.x), int(i.y)), 10, (0, 0, 255), 2)
                 except ValueError:
                     pass
-            return current_fixation
+            
+            # move the fixation_gazes into the draw gazes. check if the gazes are part of a fixation_gazes and then change color
+
+            # Check if too early to draw
+            #if ConvertWindowsTime(check_fix.fixation_start_event_time) <= timestamp:
+                # Draw Fixation Gazes first if wanted
+                #if fixation_gazes is not None:
+                #    for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
+                #        gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
+                #        try:
+                #            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
+                #        except ValueError:
+                #            pass
+                # Then draw Fixation
+                #try:
+            #        cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
+            #    except ValueError:
+            #        pass
+            return current_fixation, begin_fixation_window
         else:
-            return -1
+            return -1, -1
 
     def draw_gaze(self, frame, timestamp, current_gaze, gazes, begin_gaze_window): # returns the next gaze number
         begin_time_stamp = timestamp - ROLLING_WIN_SIZE
@@ -344,6 +367,7 @@ class MyWidget(QtWidgets.QWidget):
                     begin_gaze_window += 1
                     check_begin_gaze = gazes[begin_gaze_window]
                     check_begin_gaze_time = check_begin_gaze.system_time
+            
             for i in gazes[begin_gaze_window: current_gaze+1]:
                 try:
                     cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0), 2)
