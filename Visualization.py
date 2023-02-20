@@ -234,11 +234,11 @@ class MyWidget(QtWidgets.QWidget):
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
-    def draw_circle(self, frame, cx, cy, radius, b, g, r):
+    def draw_circle(self, frame, cx, cy, radius, bgr):
         for x in range(cx-radius, cx+radius):
             for y in range(cy-radius, cy+radius):
                 if math.dist([x, y], [cx, cy]) < radius and x >= 0 and y >= 0 and x < frame.shape[1] and y < frame.shape[0]:
-                    frame[y, x] = [b, g, r]
+                    frame[y, x] = bgr
 
     # Returns true if the session time and video time are within a second of each other
     def doSessionVideoTimesMatch(self):
@@ -378,10 +378,17 @@ class MyWidget(QtWidgets.QWidget):
                     check_begin_gaze = gazes[begin_gaze_window]
                     check_begin_gaze_time = check_begin_gaze.system_time
             
+            transparency_increment = 1 / (current_gaze + 1 - begin_gaze_window) # Amount to increment
+            transparency = int(transparency_increment)
             for i in gazes[begin_gaze_window: current_gaze+1]:
                 try:
-                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, 255, 255, 0)
-                    #cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
+                    #if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
+                        #bgr = frame[int(i.x), int(i.y)] * (100 - transparency) / 100  + [255,255,0] * transparency / 100 # get BGR value
+                        #self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, bgr)
+                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255,255,0])
+                    # cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
+                    if(transparency + transparency_increment < 100): # Increase transparency until 100%
+                        transparency += transparency_increment 
                 except ValueError:
                     pass
             
