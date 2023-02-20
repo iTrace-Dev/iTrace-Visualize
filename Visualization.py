@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 WIN_WIDTH, WIN_HEIGHT = 800, 600
 ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
 GAZE_RADIUS = 5
+FIXATION_RADIUS = 10
 
 
 # Converts windows time to Unix time
@@ -329,10 +330,20 @@ class MyWidget(QtWidgets.QWidget):
                     check_begin_fix = fixations[begin_fixation_window]
                     check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
 
+            transparency_increment = 100 / (current_fixation + 1 - begin_fixation_window) # Amount to increment
+            transparency = int(transparency_increment) # Percentage value
+
             # Draw fixations in the rolling window
             for i in fixations[begin_fixation_window: current_fixation+1]:
                 try:
-                    cv2.circle(frame, (int(i.x), int(i.y)), 10, (0, 0, 255), 2)
+                    if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
+                        b = frame[int(i.x), int(i.y), 0] * (100 - transparency) / 100  + 0 * transparency / 100 # get B value
+                        g = frame[int(i.x), int(i.y), 1] * (100 - transparency) / 100  + 0 * transparency / 100 # get G value
+                        r = frame[int(i.x), int(i.y), 2] * (100 - transparency) / 100  + 255 * transparency / 100 # get R value
+                        #cv2.circle(frame, (int(i.x), int(i.y)), 10, (b, g, r), 2)
+                        self.draw_circle(frame, int(i.x), int(i.y), FIXATION_RADIUS, [b, g, r])
+                    if(transparency + transparency_increment < 100): # Increase transparency until 100%
+                        transparency += transparency_increment 
                 except ValueError:
                     pass
             
@@ -378,14 +389,16 @@ class MyWidget(QtWidgets.QWidget):
                     check_begin_gaze = gazes[begin_gaze_window]
                     check_begin_gaze_time = check_begin_gaze.system_time
             
-            transparency_increment = 1 / (current_gaze + 1 - begin_gaze_window) # Amount to increment
-            transparency = int(transparency_increment)
-            for i in gazes[begin_gaze_window: current_gaze+1]:
+            transparency_increment = 100 / (current_gaze + 1 - begin_gaze_window) # Amount to increment
+            transparency = int(transparency_increment) # Percentage value
+            for i in gazes[begin_gaze_window: current_gaze + 1]:
                 try:
-                    #if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
-                        #bgr = frame[int(i.x), int(i.y)] * (100 - transparency) / 100  + [255,255,0] * transparency / 100 # get BGR value
-                        #self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, bgr)
-                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255,255,0])
+                    if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
+                        b = frame[int(i.x), int(i.y), 0] * (100 - transparency) / 100  + 255 * transparency / 100 # get B value
+                        g = frame[int(i.x), int(i.y), 1] * (100 - transparency) / 100  + 255 * transparency / 100 # get G value
+                        r = frame[int(i.x), int(i.y), 2] * (100 - transparency) / 100  + 0 * transparency / 100 # get R value
+                        self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [b, g, r])
+                    # self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255,255,0])
                     # cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
                     if(transparency + transparency_increment < 100): # Increase transparency until 100%
                         transparency += transparency_increment 
