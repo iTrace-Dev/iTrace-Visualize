@@ -235,11 +235,17 @@ class MyWidget(QtWidgets.QWidget):
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
-    def draw_circle(self, frame, cx, cy, radius, bgr):
+    def draw_circle(self, frame, cx, cy, radius, bgr, transparency):
         for x in range(cx-radius, cx+radius):
             for y in range(cy-radius, cy+radius):
                 if math.dist([x, y], [cx, cy]) < radius and x >= 0 and y >= 0 and x < frame.shape[1] and y < frame.shape[0]:
-                    frame[y, x] = bgr
+                    b = frame[int(y), int(x), 0] * (100 - transparency) / 100  + bgr[0] * transparency / 100 # get B value
+                    g = frame[int(y), int(x), 1] * (100 - transparency) / 100  + bgr[1] * transparency / 100 # get G value
+                    r = frame[int(y), int(x), 2] * (100 - transparency) / 100  + bgr[2] * transparency / 100 # get R value
+
+                    transparent_bgr = [b,g,r]
+
+                    frame[y, x] = transparent_bgr
 
     # Returns true if the session time and video time are within a second of each other
     def doSessionVideoTimesMatch(self):
@@ -337,11 +343,9 @@ class MyWidget(QtWidgets.QWidget):
             for i in fixations[begin_fixation_window: current_fixation+1]:
                 try:
                     if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
-                        b = frame[int(i.x), int(i.y), 0] * (100 - transparency) / 100  + 0 * transparency / 100 # get B value
-                        g = frame[int(i.x), int(i.y), 1] * (100 - transparency) / 100  + 0 * transparency / 100 # get G value
-                        r = frame[int(i.x), int(i.y), 2] * (100 - transparency) / 100  + 255 * transparency / 100 # get R value
+                        self.draw_circle(frame, (int(i.x)), (int(i.y)), FIXATION_RADIUS, [0, 0, 255], transparency)
                         #cv2.circle(frame, (int(i.x), int(i.y)), 10, (b, g, r), 2)
-                        self.draw_circle(frame, int(i.x), int(i.y), FIXATION_RADIUS, [b, g, r])
+                        #self.draw_circle(frame, int(i.x), int(i.y), FIXATION_RADIUS, [b, g, r])
                     if(transparency + transparency_increment < 100): # Increase transparency until 100%
                         transparency += transparency_increment 
                 except ValueError:
@@ -392,12 +396,8 @@ class MyWidget(QtWidgets.QWidget):
             transparency_increment = 100 / (current_gaze + 1 - begin_gaze_window) # Amount to increment
             transparency = int(transparency_increment) # Percentage value
             for i in gazes[begin_gaze_window: current_gaze + 1]:
-                try:
-                    if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
-                        b = frame[int(i.x), int(i.y), 0] * (100 - transparency) / 100  + 255 * transparency / 100 # get B value
-                        g = frame[int(i.x), int(i.y), 1] * (100 - transparency) / 100  + 255 * transparency / 100 # get G value
-                        r = frame[int(i.x), int(i.y), 2] * (100 - transparency) / 100  + 0 * transparency / 100 # get R value
-                        self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [b, g, r])
+                try: 
+                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255, 255, 0], transparency)
                     # self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255,255,0])
                     # cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
                     if(transparency + transparency_increment < 100): # Increase transparency until 100%
