@@ -7,12 +7,24 @@ import math
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
 from PySide6 import QtCore, QtWidgets, QtGui
+# from PyQt5.QtCore import pyqtSignal
 
 WIN_WIDTH, WIN_HEIGHT = 800, 600
 ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
 GAZE_RADIUS = 5
 FIXATION_RADIUS = 10
 
+# Converts color string (rgb) to color tuple (bgr)
+def ConvertColorStringToTuple(color: "#XXXXXX") -> tuple[int]:
+    color = color[1:]
+    b = int(color[4:6],base=16)
+    g = int(color[2:4],base=16)
+    r = int(color[0:2],base=16)
+    return (b,g,r)
+
+# converts color tuple (bgr) to color string (rgb)
+def ConvertColorTupleToString(color: tuple[int]) -> "#XXXXXX":
+    return "#"+str(hex(color[2]))+str(hex(color[1]))+str(hex(color[0]))
 
 # Converts windows time to Unix time
 def ConvertWindowsTime(t) -> int:
@@ -59,6 +71,7 @@ class ConfirmDialog(QtWidgets.QDialog):
 
 
 class MyWidget(QtWidgets.QWidget):
+    
     def __init__(self):
         super().__init__()
 
@@ -80,6 +93,10 @@ class MyWidget(QtWidgets.QWidget):
         # Size variables
         self.video_width = 0
         self.video_height = 0
+
+        # Color variables
+        self.gazeColor = None
+        self.saccadeColor = None
 
         # Load DB Button
         self.db_load_button = QtWidgets.QPushButton("Select Database", self)
@@ -123,6 +140,20 @@ class MyWidget(QtWidgets.QWidget):
         self.start_video_button = QtWidgets.QPushButton("Start Visualization", self)
         self.start_video_button.move(675, 750)
         self.start_video_button.clicked.connect(self.startVideoClicked)
+
+        # Load Gaze Color Picker Button (moved left to align with saccade button)
+        self.color_picker_button = QtWidgets.QPushButton("Choose Gaze color", self)
+        self.color_picker_button.move(30, 175) 
+        self.color_picker_button.clicked.connect(self.gazePickerClicked)
+        self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
+        self.color_picker_text.move(30, 200)
+
+        # Load Saccade Color Picker Button (moved left to fit)
+        self.color_picker_button = QtWidgets.QPushButton("Choose Saccade color", self)
+        self.color_picker_button.move(30, 225)
+        self.color_picker_button.clicked.connect(self.saccadePickerClicked)
+        self.color_picker_text = QtWidgets.QLabel("Default color selected", self)
+        self.color_picker_text.move(30, 250)
 
     def databaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
@@ -234,6 +265,29 @@ class MyWidget(QtWidgets.QWidget):
         self.outputVideo(gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades)
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
+
+    def gazePickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.gazeColor:
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.gazeColor)))
+        if dialog.exec():
+            self.setGazeColor(dialog.currentColor().name())
+
+    def setGazeColor(self, color): # Sets color option
+        if color != self.gazeColor:
+            self.gazeColor = ConvertColorStringToTuple(color)
+            print(self.gazeColor)
+
+    def saccadePickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.saccadeColor:
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.saccadeColor)))
+        if dialog.exec():
+            self.setSaccadeColor(dialog.currentColor().name())
+
+    def setSaccadeColor(self, color): # Sets color option
+        if color != self.saccadeColor:
+            self.saccadeColor = ConvertColorStringToTuple(color)
 
     def draw_circle(self, frame, cx, cy, radius, bgr, transparency):
         for x in range(cx-radius, cx+radius):
@@ -397,7 +451,7 @@ class MyWidget(QtWidgets.QWidget):
             transparency = int(transparency_increment) # Percentage value
             for i in gazes[begin_gaze_window: current_gaze + 1]:
                 try: 
-                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255, 255, 0], transparency)
+                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, self.gazeColor, transparency)
                     # self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255,255,0])
                     # cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
                     if(transparency + transparency_increment < 100): # Increase transparency until 100%
@@ -419,7 +473,7 @@ class MyWidget(QtWidgets.QWidget):
                 check_saccade_time = check_saccade[-1].system_time
             if check_saccade[0].system_time <= timestamp:
                 for i in range(len(check_saccade)-1):
-                    cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), (255,255,255), 2)
+                    cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), self.saccadeColor, 2)
             return current_saccade
         else:
             return -1    
