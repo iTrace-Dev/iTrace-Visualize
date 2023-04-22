@@ -2,12 +2,29 @@
 import sys
 import cv2
 import time
+import numpy as np
+import math
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
 from PySide6 import QtCore, QtWidgets, QtGui
 # from PyQt5.QtCore import pyqtSignal
 
 WIN_WIDTH, WIN_HEIGHT = 800, 600
+ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
+GAZE_RADIUS = 5
+FIXATION_RADIUS = 10
+
+# Converts color string (rgb) to color tuple (bgr)
+def ConvertColorStringToTuple(color: "#XXXXXX") -> tuple[int]:
+    color = color[1:]
+    b = int(color[4:6],base=16)
+    g = int(color[2:4],base=16)
+    r = int(color[0:2],base=16)
+    return (b,g,r)
+
+# converts color tuple (bgr) to color string (rgb)
+def ConvertColorTupleToString(color: tuple[int]) -> "#XXXXXX":
+    return "#"+str(hex(color[2]))+str(hex(color[1]))+str(hex(color[0]))
 
 # Converts windows time to Unix time
 def ConvertWindowsTime(t) -> int:
@@ -54,7 +71,7 @@ class ConfirmDialog(QtWidgets.QDialog):
 
 
 class MyWidget(QtWidgets.QWidget):
-
+    
     def __init__(self):
         super().__init__()
 
@@ -249,30 +266,40 @@ class MyWidget(QtWidgets.QWidget):
 
         print("DONE! Time elapsed:", time.time()-start, "secs")
 
-
     def gazePickerClicked(self): # Show color picker dialog/save color option
         dialog = QtWidgets.QColorDialog(self)
         if self.gazeColor:
-            dialog.setCurrentColor(QtGui.QColor(self.gazeColor))
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.gazeColor)))
         if dialog.exec():
-            self.setColor(dialog.currentColor().name())
+            self.setGazeColor(dialog.currentColor().name())
 
     def setGazeColor(self, color): # Sets color option
         if color != self.gazeColor:
-            self.gazeColor = color
-           # self.colorChanged.emit(color)
+            self.gazeColor = ConvertColorStringToTuple(color)
+            print(self.gazeColor)
 
     def saccadePickerClicked(self): # Show color picker dialog/save color option
         dialog = QtWidgets.QColorDialog(self)
         if self.saccadeColor:
-            dialog.setCurrentColor(QtGui.QColor(self.saccadeColor))
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.saccadeColor)))
         if dialog.exec():
-            self.setColor(dialog.currentColor().name())
+            self.setSaccadeColor(dialog.currentColor().name())
 
     def setSaccadeColor(self, color): # Sets color option
         if color != self.saccadeColor:
-            self.saccadeColor = color
-           # self.colorChanged.emit(color)
+            self.saccadeColor = ConvertColorStringToTuple(color)
+
+    def draw_circle(self, frame, cx, cy, radius, bgr, transparency):
+        for x in range(cx-radius, cx+radius):
+            for y in range(cy-radius, cy+radius):
+                if math.dist([x, y], [cx, cy]) < radius and x >= 0 and y >= 0 and x < frame.shape[1] and y < frame.shape[0]:
+                    b = frame[int(y), int(x), 0] * (100 - transparency) / 100  + bgr[0] * transparency / 100 # get B value
+                    g = frame[int(y), int(x), 1] * (100 - transparency) / 100  + bgr[1] * transparency / 100 # get G value
+                    r = frame[int(y), int(x), 2] * (100 - transparency) / 100  + bgr[2] * transparency / 100 # get R value
+
+                    transparent_bgr = [b,g,r]
+
+                    frame[y, x] = transparent_bgr
 
     # Returns true if the session time and video time are within a second of each other
     def doSessionVideoTimesMatch(self):
@@ -302,8 +329,10 @@ class MyWidget(QtWidgets.QWidget):
         step = (1 / self.video.get(cv2.CAP_PROP_FPS)) * 1000
 
         current_gaze = 0
+        begin_gaze_window = 0
         current_fixation = 0 if len(fixations) != 0 else -1
-        current_saccade = 0 if len(saccades) != 0 else -1
+        begin_fixation_window = current_fixation
+        current_saccade = 0 if saccades != None and len(saccades) != 0 else -1
 
         count = 0
         write_loop_time = time.time()
@@ -320,13 +349,13 @@ class MyWidget(QtWidgets.QWidget):
                     use_img = img.copy()
                     # Draw Fixations
                     if current_fixation != -1:
-                        current_fixation = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes)
+                        current_fixation, begin_fixation_window = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes, begin_fixation_window)
                     # Draw Saccades
                     if current_saccade != -1:
                         current_saccade = self.draw_saccade(use_img, use_stamp, current_saccade, saccades)
                     # Draw Gazes
                     if current_gaze != -1:
-                        current_gaze = self.draw_gaze(use_img, use_stamp, current_gaze, gazes)
+                        current_gaze, begin_gaze_window = self.draw_gaze(use_img, use_stamp, current_gaze, gazes, begin_gaze_window)
 
                     video_out.write(use_img)
                     count += 1
@@ -340,48 +369,99 @@ class MyWidget(QtWidgets.QWidget):
         video_out.release()
 
 
-    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes):
+    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes, begin_fixation_window):
+        begin_time_stamp = timestamp - ROLLING_WIN_SIZE
+
         if current_fixation < len(fixations):
             check_fix = fixations[current_fixation]
             check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
+
+            check_begin_fix = fixations[begin_fixation_window]
+            check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
+            # find the new current fixation to print
             while check_fix_time <= timestamp:
                 current_fixation += 1
                 check_fix = fixations[current_fixation]
                 check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
-            # Check if too early to draw
-            if ConvertWindowsTime(check_fix.fixation_start_event_time) <= timestamp:
-                # Draw Fixation Gazes first if wanted
-                if fixation_gazes is not None:
-                    for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
-                        gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
-                        try:
-                            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2) # fixation color
-                        except ValueError:
-                            pass
-                # Then draw Fixation
+            # Find the new beginning of rolling window:
+            if begin_time_stamp > 0:
+                while check_begin_fix_time <= begin_time_stamp:
+                    begin_fixation_window += 1
+                    check_begin_fix = fixations[begin_fixation_window]
+                    check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
+
+            transparency_increment = 100 / (current_fixation + 1 - begin_fixation_window) # Amount to increment
+            transparency = int(transparency_increment) # Percentage value
+
+            # Draw fixations in the rolling window
+            for i in fixations[begin_fixation_window: current_fixation+1]:
                 try:
-                    cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2) # change color
+                    if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
+                        self.draw_circle(frame, (int(i.x)), (int(i.y)), FIXATION_RADIUS, [0, 0, 255], transparency)
+                        #cv2.circle(frame, (int(i.x), int(i.y)), 10, (b, g, r), 2)
+                        #self.draw_circle(frame, int(i.x), int(i.y), FIXATION_RADIUS, [b, g, r])
+                    if(transparency + transparency_increment < 100): # Increase transparency until 100%
+                        transparency += transparency_increment 
                 except ValueError:
                     pass
-            return current_fixation
-        else:
-            return -1
+            
+            # move the fixation_gazes into the draw gazes. check if the gazes are part of a fixation_gazes and then change color
 
-    def draw_gaze(self, frame, timestamp, current_gaze, gazes): # returns the next gaze number
+            # Check if too early to draw
+            #if ConvertWindowsTime(check_fix.fixation_start_event_time) <= timestamp:
+                # Draw Fixation Gazes first if wanted
+                #if fixation_gazes is not None:
+                #    for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
+                #        gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
+                #        try:
+                #            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
+                #        except ValueError:
+                #            pass
+                # Then draw Fixation
+                #try:
+            #        cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
+            #    except ValueError:
+            #        pass
+            return current_fixation, begin_fixation_window
+        else:
+            return -1, -1
+
+    def draw_gaze(self, frame, timestamp, current_gaze, gazes, begin_gaze_window): # returns the next gaze number
+        begin_time_stamp = timestamp - ROLLING_WIN_SIZE
+        
         if current_gaze < len(gazes):
             check_gaze = gazes[current_gaze]
             check_gaze_time = check_gaze.system_time
+            
+            check_begin_gaze = gazes[begin_gaze_window]
+            check_begin_gaze_time = check_begin_gaze.system_time
+            
             while check_gaze_time <= timestamp:
                 current_gaze += 1
                 check_gaze = gazes[current_gaze]
                 check_gaze_time = check_gaze.system_time
-            try:
-                cv2.circle(frame, (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2) # change color
-            except ValueError:
-                pass
-            return current_gaze
+            
+            if begin_time_stamp > 0:
+                while check_begin_gaze_time <= begin_time_stamp: #loop until the begging gaze is within the timeframe of the rolling window
+                    begin_gaze_window += 1
+                    check_begin_gaze = gazes[begin_gaze_window]
+                    check_begin_gaze_time = check_begin_gaze.system_time
+            
+            transparency_increment = 100 / (current_gaze + 1 - begin_gaze_window) # Amount to increment
+            transparency = int(transparency_increment) # Percentage value
+            for i in gazes[begin_gaze_window: current_gaze + 1]:
+                try: 
+                    self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, self.gazeColor, transparency)
+                    # self.draw_circle(frame, (int(i.x)), (int(i.y)), GAZE_RADIUS, [255,255,0])
+                    # cv2.circle(frame, (int(i.x), int(i.y)), 2, (255, 255, 0))
+                    if(transparency + transparency_increment < 100): # Increase transparency until 100%
+                        transparency += transparency_increment 
+                except ValueError:
+                    pass
+            
+            return current_gaze, begin_gaze_window
         else:
-            return -1
+            return -1, -1
 
     def draw_saccade(self, frame, timestamp, current_saccade, saccades):
         if current_saccade < len(saccades):
@@ -393,12 +473,11 @@ class MyWidget(QtWidgets.QWidget):
                 check_saccade_time = check_saccade[-1].system_time
             if check_saccade[0].system_time <= timestamp:
                 for i in range(len(check_saccade)-1):
-                    cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), (255,255,255), 2)
+                    cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), self.saccadeColor, 2)
             return current_saccade
         else:
-            return -1
-
-
+            return -1    
+    
     def __HOLDER__(self):
 
         keys = list(video_frames.keys())
@@ -437,7 +516,7 @@ class MyWidget(QtWidgets.QWidget):
                     check_gaze = gazes[current_gaze]
                     check_gaze_time = check_gaze.system_time
                 try:
-                    cv2.circle(video_frames[keys[current_frame]], (int(check_gaze.x), int(check_gaze.y)), 2, (255,255,0), 2)
+                    cv2.circle(video_frames[keys[current_frame]], (int(check_gaze.x), int(check_gaze.y)), 2, (255, 255, 0), 2)
                 except ValueError:
                     pass
                     #print("Gaze",current_gaze,"is NaN")
