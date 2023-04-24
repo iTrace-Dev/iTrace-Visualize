@@ -347,15 +347,16 @@ class MyWidget(QtWidgets.QWidget):
                 for i in range(VID_SCALE):
                     use_stamp = stamp+((step/VID_SCALE)*(i))
                     use_img = img.copy()
-                    # Draw Fixations
-                    if current_fixation != -1:
-                        current_fixation, begin_fixation_window = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes, begin_fixation_window)
                     # Draw Saccades
                     if current_saccade != -1:
                         current_saccade = self.draw_saccade(use_img, use_stamp, current_saccade, saccades)
                     # Draw Gazes
                     if current_gaze != -1:
                         current_gaze, begin_gaze_window = self.draw_gaze(use_img, use_stamp, current_gaze, gazes, begin_gaze_window)
+                    # Draw Fixations
+                    if current_fixation != -1:
+                        current_fixation, begin_fixation_window = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes, begin_fixation_window)
+
 
                     video_out.write(use_img)
                     count += 1
@@ -381,12 +382,18 @@ class MyWidget(QtWidgets.QWidget):
             # find the new current fixation to print
             while check_fix_time <= timestamp:
                 current_fixation += 1
+                if current_fixation == len(fixations):
+                    current_fixation -= 1
+                    break
                 check_fix = fixations[current_fixation]
                 check_fix_time = ConvertWindowsTime(check_fix.fixation_start_event_time) + check_fix.duration
             # Find the new beginning of rolling window:
             if begin_time_stamp > 0:
                 while check_begin_fix_time <= begin_time_stamp:
                     begin_fixation_window += 1
+                    if begin_fixation_window == len(fixations):
+                        begin_fixation_window -= 1
+                        break
                     check_begin_fix = fixations[begin_fixation_window]
                     check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
 
