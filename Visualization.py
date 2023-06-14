@@ -12,7 +12,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 WIN_WIDTH, WIN_HEIGHT = 800, 600
 ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
 GAZE_RADIUS = 5
-FIXATION_RADIUS = 10
+FIXATION_RADIUS = 5
 
 # Converts color string (rgb) to color tuple (bgr)
 def ConvertColorStringToTuple(color: "#XXXXXX") -> tuple[int]:
@@ -95,8 +95,8 @@ class MyWidget(QtWidgets.QWidget):
         self.video_height = 0
 
         # Color variables
-        self.gazeColor = None
-        self.saccadeColor = None
+        self.gazeColor = (255,255,0)
+        self.saccadeColor = (255,255,255)
 
         # Load DB Button
         self.db_load_button = QtWidgets.QPushButton("Select Database", self)
@@ -315,9 +315,7 @@ class MyWidget(QtWidgets.QWidget):
         # archive_data - XML data of the srcML Archive File
     def outputVideo(self, gazes, fixations=None, fixation_gazes = None, saccades=None, replay_data=None, archive_data=None):
 
-        VID_SCALE = 1  # INCREASING THIS CAN CAUSE MEMORY ISSUES.
-                       # A 1:41 minute video will use over
-                       # 100 GB of RAM if scale is above 3
+        VID_SCALE = 1 # INCREASING THIS CAUSES THE VIDEO TO BECOME MUCH LONGER, AND HAVE MUCH MORE DETAIL
 
         print("Writing Video")
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -364,9 +362,6 @@ class MyWidget(QtWidgets.QWidget):
                 stamp += step
             else:
                 break
-
-
-
         video_out.release()
 
 
@@ -397,38 +392,18 @@ class MyWidget(QtWidgets.QWidget):
                     check_begin_fix = fixations[begin_fixation_window]
                     check_begin_fix_time = ConvertWindowsTime(check_begin_fix.fixation_start_event_time) + check_begin_fix.duration
 
-            transparency_increment = 100 / (current_fixation + 1 - begin_fixation_window) # Amount to increment
-            transparency = int(transparency_increment) # Percentage value
-
             # Draw fixations in the rolling window
-            for i in fixations[begin_fixation_window: current_fixation+1]:
+            for i in fixations[begin_fixation_window:current_fixation]:
                 try:
                     if(int(i.x) < frame.shape[0] and int(i.y) < frame.shape[1] and int(i.x) > 0 and int(i.y) > 0):
-                        self.draw_circle(frame, (int(i.x)), (int(i.y)), FIXATION_RADIUS, [0, 0, 255], transparency)
-                        #cv2.circle(frame, (int(i.x), int(i.y)), 10, (b, g, r), 2)
-                        #self.draw_circle(frame, int(i.x), int(i.y), FIXATION_RADIUS, [b, g, r])
-                    if(transparency + transparency_increment < 100): # Increase transparency until 100%
-                        transparency += transparency_increment 
+                        self.draw_circle(frame, (int(i.x)), (int(i.y)), FIXATION_RADIUS + i.duration // 50, [0, 0, 255], ((ROLLING_WIN_SIZE - (timestamp - (ConvertWindowsTime(i.fixation_start_event_time)+i.duration))) / ROLLING_WIN_SIZE) * 100)
                 except ValueError:
                     pass
+
+            self.draw_circle(frame, (int(fixations[current_fixation].x)), (int(fixations[current_fixation].y)), FIXATION_RADIUS + int(timestamp - (ConvertWindowsTime(fixations[current_fixation].fixation_start_event_time))) // 50, [0, 0, 255], 100)
             
             # move the fixation_gazes into the draw gazes. check if the gazes are part of a fixation_gazes and then change color
 
-            # Check if too early to draw
-            #if ConvertWindowsTime(check_fix.fixation_start_event_time) <= timestamp:
-                # Draw Fixation Gazes first if wanted
-                #if fixation_gazes is not None:
-                #    for fixation_gaze in fixation_gazes[check_fix.fixation_id]:
-                #        gaze = Gaze(self.idb.GetGazeFromEventTime(fixation_gaze[1]))
-                #        try:
-                #            cv2.circle(frame, (int(gaze.x), int(gaze.y)), 2, (32, 128, 2), 2)
-                #        except ValueError:
-                #            pass
-                # Then draw Fixation
-                #try:
-            #        cv2.circle(frame, (int(check_fix.x), int(check_fix.y)), 10, (0, 0, 255), 2)
-            #    except ValueError:
-            #        pass
             return current_fixation, begin_fixation_window
         else:
             return -1, -1
@@ -478,9 +453,11 @@ class MyWidget(QtWidgets.QWidget):
                 current_saccade += 1
                 check_saccade = saccades[current_saccade]
                 check_saccade_time = check_saccade[-1].system_time
+
             if check_saccade[0].system_time <= timestamp:
                 for i in range(len(check_saccade)-1):
                     cv2.line(frame, (int(check_saccade[i].x), int(check_saccade[i].y)), (int(check_saccade[i+1].x), int(check_saccade[i+1].y)), self.saccadeColor, 2)
+
             return current_saccade
         else:
             return -1    
