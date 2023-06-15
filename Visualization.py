@@ -4,8 +4,11 @@ import cv2
 import time
 import numpy as np
 import math
+
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
+from TextDetector import get_text_boxes, highlight_frame
+
 from PySide6 import QtCore, QtWidgets, QtGui
 
 WIN_WIDTH, WIN_HEIGHT = 800, 500
@@ -87,6 +90,7 @@ class MyWidget(QtWidgets.QWidget):
         # Major File Data
         self.idb = None
         self.video = None
+        self.dejavu = None
 
         # Time variables
         self.selected_session_time = 0
@@ -103,6 +107,7 @@ class MyWidget(QtWidgets.QWidget):
         self.gazeColor = (255,255,0)
         self.saccadeColor = (255,255,255)
         self.fixationColor = (0,0,255)
+        self.highlightColor = (255,0,0)
 
         # Load DB Button
         self.db_load_button = QtWidgets.QPushButton("Select Database", self)
@@ -130,11 +135,6 @@ class MyWidget(QtWidgets.QWidget):
         # self.draw_fixation_gazes_box.move(620, 300)
         # self.draw_fixation_gazes_box.setChecked(True)
 
-        # Draw Saccade Checkbox
-        self.draw_saccade_box = QtWidgets.QCheckBox("Mark Saccades",self)
-        self.draw_saccade_box.move(620, 325)
-        self.draw_saccade_box.setChecked(True)
-
         # Load Video Button
         self.video_load_button = QtWidgets.QPushButton("Select Video", self)
         self.video_load_button.move(50, 300)
@@ -142,34 +142,47 @@ class MyWidget(QtWidgets.QWidget):
         self.video_loaded_text = QtWidgets.QLabel("No Video Loaded", self)
         self.video_loaded_text.move(50, 325)
 
+        # # Select DejaVu Button
+        # self.dejavu_load_button = QtWidgets.QPushButton("Select Replay Data", self)
+        # self.dejavu_load_button.move(150,300)
+        # self.dejavu_load_button.clicked.connect(self.dejavuLoadClicked)
+        # self.dejavu_loaded_text = QtWidgets.QLabel("No Data Loaded", self)
+        # self.dejavu_loaded_text.move(150, 325)
+
         # Start Video Calculation Button
         self.start_video_button = QtWidgets.QPushButton("Start Visualization", self)
         self.start_video_button.move(25, 410)
         self.start_video_button.clicked.connect(self.startVideoClicked)
 
-        # Gaze Color Picker Button
+        # Colors
+        ## Gaze Color Picker Button
         self.color_picker_button_gaze = QtWidgets.QPushButton("Gaze color", self)
         self.color_picker_button_gaze.move(30, 175) 
         self.color_picker_button_gaze.clicked.connect(self.gazePickerClicked)
         self.color_picker_text_gaze = QtWidgets.QLabel("", self)
         self.color_picker_text_gaze.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.gazeColor)}; }}")
         self.color_picker_text_gaze.setGeometry(115, 175, 23, 23)
-
-        # Saccade Color Picker Button
+        ## Saccade Color Picker Button
         self.color_picker_button_saccade = QtWidgets.QPushButton("Saccade color", self)
         self.color_picker_button_saccade.move(30, 200)
         self.color_picker_button_saccade.clicked.connect(self.saccadePickerClicked)
         self.color_picker_text_saccade = QtWidgets.QLabel("", self)
         self.color_picker_text_saccade.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.saccadeColor)}; }}")
         self.color_picker_text_saccade.setGeometry(115, 200, 23, 23)
-
-        # Fixation Color Picker Button
+        ## Fixation Color Picker Button
         self.color_picker_button_fixation = QtWidgets.QPushButton("Fixation color", self)
         self.color_picker_button_fixation.move(30, 225)
         self.color_picker_button_fixation.clicked.connect(self.fixationPickerClicked)
         self.color_picker_text_fixation = QtWidgets.QLabel("", self)
         self.color_picker_text_fixation.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.fixationColor)}; }}")
         self.color_picker_text_fixation.setGeometry(115, 225, 23, 23)
+        ## Highlighting Color Picker Button
+        self.color_picker_button_highlight = QtWidgets.QPushButton("Highlight color", self)
+        self.color_picker_button_highlight.move(30, 250)
+        self.color_picker_button_highlight.clicked.connect(self.highlightPickerClicked)
+        self.color_picker_text_highlight = QtWidgets.QLabel("", self)
+        self.color_picker_text_highlight.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.highlightColor)}; }}")
+        self.color_picker_text_highlight.setGeometry(115, 250, 23, 23)
 
         # Progress Bar
         self.progress_bar = QtWidgets.QProgressBar(self)
@@ -180,8 +193,16 @@ class MyWidget(QtWidgets.QWidget):
         # Options
         ## Label
         self.options_text = QtWidgets.QLabel("Options",self)
-        self.options_text.move(620,300)
+        self.options_text.move(620,275)
         self.options_text.setStyleSheet("font-weight: bold");
+        ## Highlighting Checkbox
+        self.highlight_box = QtWidgets.QCheckBox("Highlight Lines",self)
+        self.highlight_box.move(620, 300)
+        self.highlight_box.setChecked(True)
+        ## Draw Saccade Checkbox
+        self.draw_saccade_box = QtWidgets.QCheckBox("Mark Saccades",self)
+        self.draw_saccade_box.move(620, 325)
+        self.draw_saccade_box.setChecked(True)
         ## Fade Delay
         self.fade_delay_box = QtWidgets.QLineEdit(self)
         self.fade_delay_box.setGeometry(620,350,25,20)
@@ -260,12 +281,35 @@ class MyWidget(QtWidgets.QWidget):
         self.loaded_video_time = self.video_frames / self.video_fps
         self.video_path = video_file_path
 
+    def dejavuLoadClicked(self):
+        dejavu_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open DejaVu Data", "", "DejaVu Files (*.csv);;All Files (*.*)")[0]
+        if(dejavu_file_path == ''):
+            self.dejavu = None
+            return
+
+        with open(dejavu_file_path,'r') as dv_file:
+            self.dejavu = dv_file.read().splitlines()
+
+        self.dejavu_loaded_text.setText(dejavu_file_path.split("/")[-1])
+
     def startVideoClicked(self):
+        # Ensure enough data
         if len(self.session_list.selectedItems()) == 0 or self.video is None:
             QtWidgets.QMessageBox.critical(self, "Error", "You are missing a required component")
             return
+        # Ensure video matches
         if not self.doSessionVideoTimesMatch():
             dlg = ConfirmDialog(self, "Mismatched Lengths", "The session length does not seem to match the video length. Continue anywway?")
+            if dlg.exec():
+                pass
+            else:
+                return
+
+        session_id = int(self.session_list.selectedItems()[0].text().split(" - ")[1])
+
+        # If dejavu, ensure it matches
+        if self.dejavu and int(self.dejavu[0].split(",")[1]) != session_id:
+            dlg = ConfirmDialog(self, "Differing Dejavu Data", "The selected DejaVu data appears to come from a different session. Continue anywway?")
             if dlg.exec():
                 pass
             else:
@@ -278,11 +322,10 @@ class MyWidget(QtWidgets.QWidget):
 
         t = time.time()
         print("Gathering Gazes, ",end="")
-        session_id = int(self.session_list.selectedItems()[0].text().split(" - ")[1])
+        
         gaze_tups = self.idb.GetAllSessionGazes(session_id)
         gazes = [Gaze(tup) for tup in gaze_tups]
         print("Len:",len(gazes),"Elapsed:",time.time()-t)
-
 
         fixations = None
         if(len(self.fixation_runs_list.selectedItems()) != 0):
@@ -307,8 +350,10 @@ class MyWidget(QtWidgets.QWidget):
             saccades = GetSaccadesOfGazesAndFixationGazes(self.idb, gazes, fixation_gazes if fixation_gazes is not None else self.idb.GetAllFixationGazes(fixations))
             print("Len:",len(saccades),"Elapsed:",time.time()-t)
 
+        if self.dejavu:
+            print("Gathering Replay Data, Len:",len(self.dejavu))
 
-        self.outputVideo(gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades)
+        self.outputVideo(gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades, replay_data=self.dejavu)
         self.progress_bar.reset()
 
     def gazePickerClicked(self): # Show color picker dialog/save color option
@@ -346,6 +391,18 @@ class MyWidget(QtWidgets.QWidget):
         if color != self.fixationColor:
             self.fixationColor = ConvertColorStringToTuple(color)
             self.color_picker_text_fixation.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.fixationColor)}; }}")
+
+    def highlightPickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.highlightColor:
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.highlightColor)))
+        if dialog.exec():
+            self.setHighlightColor(dialog.currentColor().name())
+
+    def setHighlightColor(self, color): # Sets color option
+        if color != self.highlightColor:
+            self.highlightColor = ConvertColorStringToTuple(color)
+            self.color_picker_text_highlight.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.highlightColor)}; }}")
 
 
     def draw_circle(self, frame, cx, cy, radius, bgr, transparency):
@@ -390,13 +447,13 @@ class MyWidget(QtWidgets.QWidget):
         current_fixation = 0 if len(fixations) != 0 else -1
         begin_fixation_window = current_fixation
         current_saccade = 0 if saccades != None and len(saccades) != 0 else -1
+        current_replay = 1 if replay_data != None and len(replay_data) != 0 else -1
 
         count = 0
         write_loop_time = time.time()
+        prev_img = None
+        boxes = None
         while True:
-            # if time.time() - write_loop_time > 1:
-            #     write_loop_time = time.time()
-            #     print(f'{round(count/video_len*100,2)}%')
             self.progress_bar.setValue(int(count/video_len*100))
             dt = int(time.time() - start)
             h = dt // (60*60)
@@ -412,6 +469,11 @@ class MyWidget(QtWidgets.QWidget):
                 for i in range(self.VID_SCALE):
                     use_stamp = stamp+((step/self.VID_SCALE)*(i))
                     use_img = img.copy()
+                    orig = use_img.copy()
+
+                    # Update text boxes if highlighting
+                    if self.highlight_box.isChecked():
+                        boxes = get_text_boxes(orig,prev_img,boxes)
                     # Draw Saccades
                     if current_saccade != -1:
                         current_saccade = self.draw_saccade(use_img, use_stamp, current_saccade, saccades)
@@ -420,10 +482,12 @@ class MyWidget(QtWidgets.QWidget):
                         current_gaze, begin_gaze_window = self.draw_gaze(use_img, use_stamp, current_gaze, gazes, begin_gaze_window)
                     # Draw Fixations
                     if current_fixation != -1:
-                        current_fixation, begin_fixation_window = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes, begin_fixation_window)
+                        current_fixation, begin_fixation_window = self.draw_fixation(use_img, use_stamp, current_fixation, fixations, fixation_gazes, begin_fixation_window, boxes)
 
                     video_out.write(use_img)
                     count += 1
+                    prev_img = orig
+
 
                 stamp += step
             else:
@@ -433,7 +497,7 @@ class MyWidget(QtWidgets.QWidget):
         video_out.release()
 
 
-    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes, begin_fixation_window):
+    def draw_fixation(self, frame, timestamp, current_fixation, fixations, fixation_gazes, begin_fixation_window, boxes):
         begin_time_stamp = timestamp - self.ROLLING_WIN_SIZE
 
         if current_fixation < len(fixations):
@@ -469,7 +533,8 @@ class MyWidget(QtWidgets.QWidget):
                     pass
 
             self.draw_circle(frame, (int(fixations[current_fixation].x)), (int(fixations[current_fixation].y)), self.FIXATION_RADIUS + int(timestamp - (ConvertWindowsTime(fixations[current_fixation].fixation_start_event_time))) // 50, self.fixationColor, 100)
-            
+            if self.highlight_box.isChecked():
+                highlight_frame(frame,boxes,fixations[current_fixation],self.highlightColor)
             # move the fixation_gazes into the draw gazes. check if the gazes are part of a fixation_gazes and then change color
 
             return current_fixation, begin_fixation_window
@@ -526,8 +591,8 @@ class MyWidget(QtWidgets.QWidget):
 
             return current_saccade
         else:
-            return -1    
-    
+            return -1
+
     def __HOLDER__(self):
 
         keys = list(video_frames.keys())
