@@ -11,6 +11,10 @@ from TextDetector import get_text_boxes, highlight_frame
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
+import ctypes
+myappid = 'mycompany.myproduct.subproduct.version' # arbitrary string
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
 WIN_WIDTH, WIN_HEIGHT = 800, 500
 DEFAULT_ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
 DEFAULT_GAZE_RADIUS = 5
@@ -83,9 +87,10 @@ class MyWidget(QtWidgets.QWidget):
         self.FIXATION_RADIUS = DEFAULT_FIXATION_RADIUS
         self.VID_SCALE = DEFAULT_VID_SCALE
 
-        self.title = "iTrace Visualization"
+        self.setWindowTitle("iTrace Visualization")
         self.setMinimumHeight(WIN_HEIGHT)
         self.setMinimumWidth(WIN_WIDTH)
+        self.setWindowIcon(QtGui.QIcon("Visualize.png"))
 
         # Major File Data
         self.idb = None
@@ -643,7 +648,9 @@ class MyWidget(QtWidgets.QWidget):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
+    app.setWindowIcon(QtGui.QIcon("Visualize.png"))
     window = MyWidget()
     window.resize(WIN_WIDTH, WIN_HEIGHT)
     window.show()
+
     sys.exit(app.exec())
