@@ -315,6 +315,10 @@ class MyWidget(QtWidgets.QWidget):
             else:
                 return
 
+        output_file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self,"Save Video","","MP4(*.mp4)")
+        if not output_file_name:
+            return
+
         self.ROLLING_WIN_SIZE = int(self.fade_delay_box.text()) * 1000
         self.GAZE_RADIUS = int(self.gaze_radius_box.text())
         self.FIXATION_RADIUS = int(self.base_fixation_radius_box.text())
@@ -353,7 +357,7 @@ class MyWidget(QtWidgets.QWidget):
         if self.dejavu:
             print("Gathering Replay Data, Len:",len(self.dejavu))
 
-        self.outputVideo(gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades, replay_data=self.dejavu)
+        self.outputVideo(output_file_name, gazes=gazes, fixations=fixations, fixation_gazes=fixation_gazes, saccades=saccades, replay_data=self.dejavu)
         self.progress_bar.reset()
 
     def gazePickerClicked(self): # Show color picker dialog/save color option
@@ -429,13 +433,13 @@ class MyWidget(QtWidgets.QWidget):
         # saccades - List of list of gazes making up a Saccade
         # replay data - List of mouse and keyboard inputs
         # archive_data - XML data of the srcML Archive File
-    def outputVideo(self, gazes, fixations=None, fixation_gazes = None, saccades=None, replay_data=None, archive_data=None):
+    def outputVideo(self, output_file_name, gazes, fixations=None, fixation_gazes = None, saccades=None, replay_data=None, archive_data=None):
 
         start = time.time()
 
         print("Writing Video")
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        video_out = cv2.VideoWriter("output.mp4", fourcc, self.video_fps, (self.video_width, self.video_height))
+        video_out = cv2.VideoWriter(output_file_name, fourcc, self.video_fps, (self.video_width, self.video_height))
 
         video_len = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT)) * self.VID_SCALE
 

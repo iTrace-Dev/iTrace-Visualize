@@ -69,8 +69,6 @@ def get_text_boxes(current_frame, previous_frame, boxes):
         print("Generating new highlight data")
         original = current_frame.copy()
         # Process Image
-        #print(cropped)
-        #cv2.imshow("Cropped",cropped)
         ## Invert
         inv = cv2.bitwise_not(original)
         ## Gray
@@ -88,11 +86,20 @@ def get_text_boxes(current_frame, previous_frame, boxes):
                 if dilation[x][y] == 255:
                     box = flood_fill(dilation,(y,x))
                     boxes.append(box)
+        height_map = {}
         # avg_height = 0
-        # for box in boxes:
-        #     print(box,"->",box[1][1] - box[0][1])
-        #     avg_height += box[1][1] - box[0][1]
-        # avg_height /= len(boxes)
+        for box in boxes:
+            height = box[1][1] - box[0][1]
+            if height not in height_map:
+                height_map[height] = 0
+            height_map[height] += 1
+        mode_height = max(height_map,key=height_map.get)
+        rtn_boxes = []
+        for box in boxes:
+            height = box[1][1] - box[0][1]
+            if height > (mode_height / 2) and height < (mode_height * 1.5):
+                rtn_boxes.append(box)
+        boxes = rtn_boxes
     return boxes
 
 def highlight_frame(frame,boxes,fixation,color):
