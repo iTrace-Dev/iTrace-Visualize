@@ -5,6 +5,7 @@ import time
 import numpy as np
 import math
 
+import xml.etree.ElementTree as ET
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
 from TextDetector import get_text_boxes, highlight_frame
@@ -15,7 +16,7 @@ import ctypes
 myappid = 'mycompany.myproduct.subproduct.version' # arbitrary string
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
-WIN_WIDTH, WIN_HEIGHT = 800, 500
+WIN_WIDTH, WIN_HEIGHT = 950, 465
 DEFAULT_ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
 DEFAULT_GAZE_RADIUS = 5
 DEFAULT_FIXATION_RADIUS = 5
@@ -96,6 +97,7 @@ class MyWidget(QtWidgets.QWidget):
         self.idb = None
         self.video = None
         self.dejavu = None
+        self.srcml = None
 
         # Time variables
         self.selected_session_time = 0
@@ -114,38 +116,93 @@ class MyWidget(QtWidgets.QWidget):
         self.fixationColor = (0,0,255)
         self.highlightColor = (255,0,0)
 
+        # Tabs
+        self.tab_widget = QtWidgets.QTabWidget(self)
+
+        self.video_tab = QtWidgets.QWidget()
+        self.video_layout = QtWidgets.QGridLayout()
+        self.video_tab.setLayout(self.video_layout)
+
+        self.code_tab = QtWidgets.QWidget()
+        self.code_layout = QtWidgets.QGridLayout()
+        self.code_tab.setLayout(self.code_layout)
+
+# Video Tab
+############################################################################
         # Load DB Button
-        self.db_load_button = QtWidgets.QPushButton("Select Database", self)
-        self.db_load_button.move(50, 50)
-        self.db_load_button.clicked.connect(self.databaseButtonClicked)
-        self.db_loaded_text = QtWidgets.QLabel("No Database Loaded", self)
-        self.db_loaded_text.move(50, 75)
+        self.video_db_load_button = QtWidgets.QPushButton("Select Database", self)
+        self.video_db_load_button.clicked.connect(self.databaseButtonClicked)
+        self.video_db_loaded_text = QtWidgets.QLabel("No Database Loaded", self)
+        self.video_layout.addWidget(self.video_db_load_button,1,0)
+        self.video_layout.addWidget(self.video_db_loaded_text,0,0)
+
+
+        self.video_layout.setColumnMinimumWidth(1,23)
+        self.video_layout.setColumnMinimumWidth(2,10)
 
         # Session List
-        self.session_list = QtWidgets.QListWidget(self)
-        self.session_list.move(200, 75)
-        self.session_list.itemClicked.connect(self.sessionLoadClicked)
-        self.session_list_text = QtWidgets.QLabel("Sessions", self)
-        self.session_list_text.move(200, 50)
+        self.video_session_list = QtWidgets.QListWidget(self)
+        self.video_session_list.itemClicked.connect(self.sessionLoadClicked)
+        self.video_layout.addWidget(self.video_session_list,1,3,10,10)
+        self.video_session_list_text = QtWidgets.QLabel("Sessions", self)
+        self.video_layout.addWidget(self.video_session_list_text,0,3)
+        self.video_layout.setColumnMinimumWidth(9,250)
 
         # Fixation Run List
-        self.fixation_runs_list = QtWidgets.QListWidget(self)
-        self.fixation_runs_list.move(500, 75)
-        self.fixation_runs_list.itemClicked.connect(self.fixationRunClicked)
-        self.fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
-        self.fixation_runs_list_text.move(500, 50)
+        self.video_fixation_runs_list = QtWidgets.QListWidget(self)
+        self.video_fixation_runs_list.itemClicked.connect(self.fixationRunClicked)
+        self.video_layout.addWidget(self.video_fixation_runs_list,1,13,10,10)
+        self.video_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
+        self.video_layout.addWidget(self.video_fixation_runs_list_text,0,13)
 
-        # # Draw Fixation Gazes Checkbox
+        # Colors
+        ## Gaze Color Picker Button
+        self.color_picker_button_gaze = QtWidgets.QPushButton("Gaze color", self)
+        self.color_picker_button_gaze.clicked.connect(self.gazePickerClicked)
+        self.video_layout.addWidget(self.color_picker_button_gaze,3,0)
+        self.color_picker_text_gaze = QtWidgets.QLabel("", self)
+        self.color_picker_text_gaze.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.gazeColor)}; }}")
+        self.color_picker_text_gaze.setGeometry(115, 175, 23, 23)
+        self.video_layout.addWidget(self.color_picker_text_gaze,3,1)
+
+        # Saccade Color Picker Button
+        self.color_picker_button_saccade = QtWidgets.QPushButton("Saccade color", self)
+        self.color_picker_button_saccade.clicked.connect(self.saccadePickerClicked)
+        self.video_layout.addWidget(self.color_picker_button_saccade,4,0)
+        self.color_picker_text_saccade = QtWidgets.QLabel("", self)
+        self.color_picker_text_saccade.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.saccadeColor)}; }}")
+        self.color_picker_text_saccade.setGeometry(115, 200, 23, 23)
+        self.video_layout.addWidget(self.color_picker_text_saccade,4,1)
+
+        ## Fixation Color Picker Button
+        self.color_picker_button_fixation = QtWidgets.QPushButton("Fixation color", self)
+        self.color_picker_button_fixation.clicked.connect(self.fixationPickerClicked)
+        self.video_layout.addWidget(self.color_picker_button_fixation,5,0)
+        self.color_picker_text_fixation = QtWidgets.QLabel("", self)
+        self.color_picker_text_fixation.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.fixationColor)}; }}")
+        self.color_picker_text_fixation.setGeometry(115, 225, 23, 23)
+        self.video_layout.addWidget(self.color_picker_text_fixation,5,1)
+
+        ## Highlighting Color Picker Button
+        self.color_picker_button_highlight = QtWidgets.QPushButton("Highlight color", self)
+        self.color_picker_button_highlight.clicked.connect(self.highlightPickerClicked)
+        self.video_layout.addWidget(self.color_picker_button_highlight,6,0)
+        self.color_picker_text_highlight = QtWidgets.QLabel("", self)
+        self.color_picker_text_highlight.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.highlightColor)}; }}")
+        self.color_picker_text_highlight.setGeometry(115, 250, 23, 23)
+        self.video_layout.addWidget(self.color_picker_text_highlight,6,1)
+
+        # Draw Fixation Gazes Checkbox
         # self.draw_fixation_gazes_box = QtWidgets.QCheckBox("Mark Gaze Fixations",self)
         # self.draw_fixation_gazes_box.move(620, 300)
         # self.draw_fixation_gazes_box.setChecked(True)
 
         # Load Video Button
         self.video_load_button = QtWidgets.QPushButton("Select Video", self)
-        self.video_load_button.move(50, 300)
         self.video_load_button.clicked.connect(self.videoLoadClicked)
+        self.video_layout.addWidget(self.video_load_button,11,0)
         self.video_loaded_text = QtWidgets.QLabel("No Video Loaded", self)
-        self.video_loaded_text.move(50, 325)
+        self.video_layout.addWidget(self.video_loaded_text,12,0)
 
         # # Select DejaVu Button
         # self.dejavu_load_button = QtWidgets.QPushButton("Select Replay Data", self)
@@ -154,93 +211,122 @@ class MyWidget(QtWidgets.QWidget):
         # self.dejavu_loaded_text = QtWidgets.QLabel("No Data Loaded", self)
         # self.dejavu_loaded_text.move(150, 325)
 
-        # Start Video Calculation Button
-        self.start_video_button = QtWidgets.QPushButton("Start Visualization", self)
-        self.start_video_button.move(25, 410)
-        self.start_video_button.clicked.connect(self.startVideoClicked)
-
-        # Colors
-        ## Gaze Color Picker Button
-        self.color_picker_button_gaze = QtWidgets.QPushButton("Gaze color", self)
-        self.color_picker_button_gaze.move(30, 175) 
-        self.color_picker_button_gaze.clicked.connect(self.gazePickerClicked)
-        self.color_picker_text_gaze = QtWidgets.QLabel("", self)
-        self.color_picker_text_gaze.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.gazeColor)}; }}")
-        self.color_picker_text_gaze.setGeometry(115, 175, 23, 23)
-        ## Saccade Color Picker Button
-        self.color_picker_button_saccade = QtWidgets.QPushButton("Saccade color", self)
-        self.color_picker_button_saccade.move(30, 200)
-        self.color_picker_button_saccade.clicked.connect(self.saccadePickerClicked)
-        self.color_picker_text_saccade = QtWidgets.QLabel("", self)
-        self.color_picker_text_saccade.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.saccadeColor)}; }}")
-        self.color_picker_text_saccade.setGeometry(115, 200, 23, 23)
-        ## Fixation Color Picker Button
-        self.color_picker_button_fixation = QtWidgets.QPushButton("Fixation color", self)
-        self.color_picker_button_fixation.move(30, 225)
-        self.color_picker_button_fixation.clicked.connect(self.fixationPickerClicked)
-        self.color_picker_text_fixation = QtWidgets.QLabel("", self)
-        self.color_picker_text_fixation.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.fixationColor)}; }}")
-        self.color_picker_text_fixation.setGeometry(115, 225, 23, 23)
-        ## Highlighting Color Picker Button
-        self.color_picker_button_highlight = QtWidgets.QPushButton("Highlight color", self)
-        self.color_picker_button_highlight.move(30, 250)
-        self.color_picker_button_highlight.clicked.connect(self.highlightPickerClicked)
-        self.color_picker_text_highlight = QtWidgets.QLabel("", self)
-        self.color_picker_text_highlight.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.highlightColor)}; }}")
-        self.color_picker_text_highlight.setGeometry(115, 250, 23, 23)
-
-        # Progress Bar
-        self.progress_bar = QtWidgets.QProgressBar(self)
-        self.progress_bar.setGeometry(25,450,200,25)
-        self.elapsed_time_text = QtWidgets.QLabel("00:00:00",self)
-        self.elapsed_time_text.move(130,415)
-
         # Options
         ## Label
         self.options_text = QtWidgets.QLabel("Options",self)
-        self.options_text.move(620,275)
-        self.options_text.setStyleSheet("font-weight: bold");
+        self.options_text.setStyleSheet("font-weight: bold")
+        self.video_layout.addWidget(self.options_text,11,22)
+
         ## Highlighting Checkbox
         self.highlight_box = QtWidgets.QCheckBox("Highlight Lines",self)
-        self.highlight_box.move(620, 300)
         self.highlight_box.setChecked(True)
+        self.video_layout.addWidget(self.highlight_box,12,22)
+
         ## Draw Saccade Checkbox
         self.draw_saccade_box = QtWidgets.QCheckBox("Mark Saccades",self)
-        self.draw_saccade_box.move(620, 325)
         self.draw_saccade_box.setChecked(True)
+        self.video_layout.addWidget(self.draw_saccade_box,13,22)
+
         ## Fade Delay
         self.fade_delay_box = QtWidgets.QLineEdit(self)
         self.fade_delay_box.setGeometry(620,350,25,20)
         self.fade_delay_box.setValidator(QtGui.QIntValidator())
         self.fade_delay_box.setText(str(DEFAULT_ROLLING_WIN_SIZE//1000))
+        self.video_layout.addWidget(self.fade_delay_box,14,21)
         self.fade_delay_text = QtWidgets.QLabel("Fade Delay (seconds)",self)
-        self.fade_delay_text.move(650,350)
+        self.video_layout.addWidget(self.fade_delay_text,14,22)
+
         ## Video Stretch
         self.video_stretch_box = QtWidgets.QLineEdit(self)
         self.video_stretch_box.setGeometry(620,375,25,20)
         self.video_stretch_box.setValidator(QtGui.QIntValidator())
         self.video_stretch_box.setText(str(DEFAULT_VID_SCALE))
+        self.video_layout.addWidget(self.video_stretch_box,15,21)
         self.video_stretch_text = QtWidgets.QLabel("Video Stretch Factor",self)
-        self.video_stretch_text.move(650,375)
+        self.video_layout.addWidget(self.video_stretch_text,15,22)
+
         ## Gaze Radius
         self.gaze_radius_box = QtWidgets.QLineEdit(self)
         self.gaze_radius_box.setGeometry(620,400,25,20)
         self.gaze_radius_box.setValidator(QtGui.QIntValidator())
         self.gaze_radius_box.setText(str(DEFAULT_GAZE_RADIUS))
+        self.video_layout.addWidget(self.gaze_radius_box,16,21)
         self.gaze_radius_text = QtWidgets.QLabel("Gaze Radius (pixels)",self)
-        self.gaze_radius_text.move(650,400)
+        self.video_layout.addWidget(self.gaze_radius_text,16,22)
+
         ## Base Fixation Radius
         self.base_fixation_radius_box = QtWidgets.QLineEdit(self)
         self.base_fixation_radius_box.setGeometry(620,425,25,20)
         self.base_fixation_radius_box.setValidator(QtGui.QIntValidator())
         self.base_fixation_radius_box.setText(str(DEFAULT_FIXATION_RADIUS))
+        self.video_layout.addWidget(self.base_fixation_radius_box,17,21)
         self.base_fixation_radius_text = QtWidgets.QLabel("Base Fixation Radius (pixels)",self)
-        self.base_fixation_radius_text.move(650,425)
+        self.video_layout.addWidget(self.base_fixation_radius_text,17,22)
+
+        # Start Video Calculation Button
+        self.start_video_button = QtWidgets.QPushButton("Start Visualization", self)
+        self.start_video_button.clicked.connect(self.startVideoClicked)
+        self.video_layout.addWidget(self.start_video_button,16,0)
+
+        # Progress Bar
+        self.progress_bar = QtWidgets.QProgressBar(self)
+        # self.progress_bar.setGeometry(25,450,200,25)
+        self.video_layout.addWidget(self.progress_bar,17,0,1,4)
+        self.elapsed_time_text = QtWidgets.QLabel("00:00:00",self)
+        self.video_layout.addWidget(self.elapsed_time_text,16,1,1,3)
+
+# Video Tab
+############################################################################
+
+        # DB Button
+        self.code_db_load_button = QtWidgets.QPushButton("Select Database", self)
+        self.code_db_load_button.clicked.connect(self.databaseButtonClicked)
+        self.code_db_loaded_text = QtWidgets.QLabel("No Database Loaded", self)
+        self.code_layout.addWidget(self.code_db_load_button,1,0)
+        self.code_layout.addWidget(self.code_db_loaded_text,0,0)
+
+        self.video_layout.setRowMinimumHeight(2,10)
+
+        # srcML Button
+        self.srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
+        self.srcml_load_button.clicked.connect(self.srcmlButtonClicked)
+        self.srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
+        self.code_layout.addWidget(self.srcml_load_button,4,0)
+        self.code_layout.addWidget(self.srcml_loaded_text,3,0)
+
+        self.video_layout.setRowMinimumHeight(5,10)
+
+        # Process Button
+        self.process_code_button = QtWidgets.QPushButton("Process Image",self)
+        self.process_code_button.clicked.connect(self.generateCodeHeatmap)
+        self.code_layout.addWidget(self.process_code_button,6,0)
+
+        # Session List
+        self.code_session_list = QtWidgets.QListWidget(self)
+        self.code_session_list.itemClicked.connect(self.sessionLoadClicked)
+        self.code_layout.addWidget(self.code_session_list,1,3,10,10)
+        self.code_session_list_text = QtWidgets.QLabel("Sessions", self)
+        self.code_layout.addWidget(self.code_session_list_text,0,3)
+
+        # Fixation Run List
+        self.code_fixation_runs_list = QtWidgets.QListWidget(self)
+        self.code_fixation_runs_list.itemClicked.connect(self.fixationRunClicked)
+        self.code_layout.addWidget(self.code_fixation_runs_list,1,13,10,10)
+        self.code_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
+        self.code_layout.addWidget(self.code_fixation_runs_list_text,0,13)
+
+
+
+
+        self.tab_widget.addTab(self.video_tab,'Video')
+        self.tab_widget.addTab(self.code_tab,'Source Code')
+
+
 
 
 
     def databaseButtonClicked(self): # Load Database
-        db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "Desktop/iTrace/Testing/Visualize", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
+        db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
         if(db_file_path == ''):
             return
         try:
@@ -248,16 +334,47 @@ class MyWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
             return
-        self.db_loaded_text.setText(db_file_path.split("/")[-1])
-        self.session_list.clear()
-        self.fixation_runs_list.clear()
-        self.session_list.addItems(self.idb.GetSessions())
+        display_name = db_file_path.split("/")[-1]
+        if len(display_name) > 20:
+            display_name = display_name[:20]
+        self.video_db_loaded_text.setText(display_name)
+        self.code_db_loaded_text.setText(display_name)
+        self.video_session_list.clear()
+        self.code_session_list.clear()
+        self.video_fixation_runs_list.clear()
+        self.code_fixation_runs_list.clear()
+
+        sessions = self.idb.GetSessions()
+        self.video_session_list.addItems(sessions)
+        self.code_session_list.addItems(sessions)
+
+    def srcmlButtonClicked(self): # Load srcML
+        srcml_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open srcML Archive","","srcML Files (*.xml *.srcml)")[0]
+        if(srcml_file_path == ''):
+            return
+        try:
+            self.srcml = ET.parse(srcml_file_path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            return
+        print(self.srcml.getroot().attrib)
+        if("filename" in self.srcml.getroot().attrib):
+            QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
+            self.video = None
+            return
+        display_name = srcml_file_path.split("/")[-1]
+        if len(display_name) > 20:
+            display_name = display_name[:20]
+        self.srcml_loaded_text.setText(display_name)
 
     def sessionLoadClicked(self, item):  # Select Session
         session_id = int(item.text().split(" - ")[1])
 
-        self.fixation_runs_list.clear()
-        self.fixation_runs_list.addItems(self.idb.GetFixationRuns(session_id))
+        self.video_fixation_runs_list.clear()
+        self.video_fixation_runs_list.addItems(self.idb.GetFixationRuns(session_id))
+
+        self.code_fixation_runs_list.clear()
+        self.code_fixation_runs_list.addItems(self.idb.GetFixationRuns(session_id))
 
         self.selected_session_time = self.idb.GetSessionTimeLength(session_id)
         self.session_start_time = self.idb.GetSessionStartTime(session_id)
@@ -278,7 +395,10 @@ class MyWidget(QtWidgets.QWidget):
             self.video = None
             return
 
-        self.video_loaded_text.setText(video_file_path.split("/")[-1])
+        display_name = video_file_path.split("/")[-1]
+        if len(display_name) > 20:
+            display_name = display_name[:20]
+        self.video_loaded_text.setText(display_name)
         self.video_fps = int(self.video.get(cv2.CAP_PROP_FPS))
         self.video_height = int(self.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.video_width = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -299,22 +419,22 @@ class MyWidget(QtWidgets.QWidget):
 
     def startVideoClicked(self):
         # Ensure enough data
-        if len(self.session_list.selectedItems()) == 0 or self.video is None:
+        if len(self.video_session_list.selectedItems()) == 0 or self.video is None:
             QtWidgets.QMessageBox.critical(self, "Error", "You are missing a required component")
             return
         # Ensure video matches
         if not self.doSessionVideoTimesMatch():
-            dlg = ConfirmDialog(self, "Mismatched Lengths", "The session length does not seem to match the video length. Continue anywway?")
+            dlg = ConfirmDialog(self, "Mismatched Lengths", "The session length does not seem to match the video length. Continue anyway?")
             if dlg.exec():
                 pass
             else:
                 return
 
-        session_id = int(self.session_list.selectedItems()[0].text().split(" - ")[1])
+        session_id = int(self.video_session_list.selectedItems()[0].text().split(" - ")[1])
 
         # If dejavu, ensure it matches
         if self.dejavu and int(self.dejavu[0].split(",")[1]) != session_id:
-            dlg = ConfirmDialog(self, "Differing Dejavu Data", "The selected DejaVu data appears to come from a different session. Continue anywway?")
+            dlg = ConfirmDialog(self, "Differing DejaVu Data", "The selected DejaVu data appears to come from a different session. Continue anywway?")
             if dlg.exec():
                 pass
             else:
@@ -337,10 +457,10 @@ class MyWidget(QtWidgets.QWidget):
         print("Len:",len(gazes),"Elapsed:",time.time()-t)
 
         fixations = None
-        if(len(self.fixation_runs_list.selectedItems()) != 0):
+        if(len(self.video_fixation_runs_list.selectedItems()) != 0):
             t = time.time()
             print("Gathering Fixations, ",end="")
-            fixation_run_id = int(self.fixation_runs_list.selectedItems()[0].text().split(" - ")[1])
+            fixation_run_id = int(self.video_fixation_runs_list.selectedItems()[0].text().split(" - ")[1])
             fixation_tups = self.idb.GetAllRunFixations(fixation_run_id)
             fixations = [Fixation(tup) for tup in fixation_tups]
             print("Len:",len(fixations),"Elapsed:",time.time()-t)
@@ -601,6 +721,21 @@ class MyWidget(QtWidgets.QWidget):
             return current_saccade
         else:
             return -1
+
+    def generateCodeHeatmap(self):
+        if(self.idb == None or self.srcml == None or len(self.code_fixation_runs_list.selectedItems()) == 0):
+            QtWidgets.QMessageBox.critical(self, "Error", "You are missing a required component")
+            return
+        srcml_root = self.srcml.getroot()
+
+        output_folder_name = QtWidgets.QFileDialog.getExistingDirectory(self,"Open Directory")
+        if not output_folder_name:
+            return
+
+        for unit in srcml_root:
+            #print(unit.tag,unit.attrib)
+            code_str = ET.tostring(unit)
+        print(output_folder_name)
 
     def __HOLDER__(self):
 
