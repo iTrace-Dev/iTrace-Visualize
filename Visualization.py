@@ -4,6 +4,8 @@ import cv2
 import time
 import numpy as np
 import math
+import re
+from PIL import Image, ImageFont, ImageDraw
 
 import xml.etree.ElementTree as ET
 from iTraceDB import iTraceDB
@@ -60,6 +62,55 @@ def GetSaccadesOfGazesAndFixationGazes(idb,gazes,fixation_gazes) -> list[list[Ga
         saccades.append(add)
 
     return saccades
+
+def FindMatchingPath(all_files,target_file):
+    target_file.replace("\\","/")
+    target_file = target_file.lower()
+    file_split = target_file.split("/")
+    check = file_split[-1]
+    
+    possible = []
+    for file in all_files:
+        if file.lower().endswith(check):
+            possible.append(file.split("/"))
+
+    if len(possible) == 0:
+        return None
+    elif len(possible) == 1:
+        return "/".join(possible[0])
+
+    shortest = ""
+    passes = 1
+
+    while len(possible) != 1:
+        candidates = []
+        if passes > len(file_split):
+            return shortest
+        for unit_path in possible:
+            if passes > len(unit_path):
+                if shortest == "":
+                    shortest = "/".join(unit_path)
+                continue
+            unit_check = unit_path[len(unit_path) - passes].lower()
+            file_check = file_split[len(file_split) - passes]
+            if unit_check == file_check:
+                candidates.append(unit_path)
+        possible = candidates
+        passes += 1
+
+    if len(possible) == 0:
+        return None;
+    return "/".join(possible[0])
+
+def FindTokenInElement(line,col,element):
+    element_line_start = int(element.attrib["pos:start"].split(":")[0])
+    element_col_start = int(element.attrib["pos:start"].split(":")[1])
+    element_line_end = int(element.attrib["pos:end"].split(":")[0])
+    element_col_end = int(element.attrib["pos:end"].split(":")[1])
+
+    for child in element:
+        FindTokenInElement(line,col,child)
+
 
 
 class ConfirmDialog(QtWidgets.QDialog):
@@ -732,10 +783,68 @@ class MyWidget(QtWidgets.QWidget):
         if not output_folder_name:
             return
 
+        session_id = int(self.code_session_list.selectedItems()[0].text().split(" - ")[1])
+        fixation_run_id = int(self.code_fixation_runs_list.selectedItems()[0].text().split(" - ")[1])
+
+        xml_remover = re.compile("<.*?>")
+        # At 28 Font size, bounding boxes are 17x28
+        #    32 Font size, bounding boxes are 19x31
+        font = ImageFont.truetype("cour.ttf",28)
+        H = 17
+        W = 28
+
+
+        units = {}
+
         for unit in srcml_root:
-            #print(unit.tag,unit.attrib)
-            code_str = ET.tostring(unit)
-        print(output_folder_name)
+            units[unit.attrib["filename"]] = unit
+
+        gazed_files = [x[0] for x in self.idb.GetFilesLookedAtBySession(session_id)]
+        print(gazed_files)
+
+        for target_file in gazed_files:
+            print(target_file)
+            unit_target = FindMatchingPath(list(units.keys()),target_file)
+            unit = units[unit_target]
+
+            # Create blank file
+            file = unit.attrib["filename"].split("/")[-1]
+            src_str = xml_remover.sub('',ET.tostring(unit).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
+
+            lines = src_str.split("\n")
+            rows = len(lines)
+            cols = max([len(line.rstrip()) for line in lines])
+
+            height = rows * W
+            width = cols * H
+
+            img = np.zeros((height,width,3), dtype=np.uint8)
+            img.fill(255)
+
+
+            draw_tokens = []
+            fixations = self.idb.GetAllRunFixations(fixation_run_id)
+            for fixation in fixations:
+                line_num = fixation.source_file_line
+                col_num = fixation.source_file_col
+                element = unit
+                
+
+
+
+
+
+            img = Image.fromarray(img)
+            draw = ImageDraw.Draw(img)
+            draw.text((0,0),src_str,(0,0,0),font=font)
+            img = np.array(img)
+
+            cv2.imwrite(output_folder_name+"/"+file+".png",img)
+
+
+
+
+
 
     def __HOLDER__(self):
 

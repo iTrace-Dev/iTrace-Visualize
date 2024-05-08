@@ -70,6 +70,9 @@ class iTraceDB:
     def GetGazeFromEventTime(self,event_time):
         return self.cursor.execute("""SELECT * FROM gaze WHERE event_time = ?""", (event_time,)).fetchall()[0]
 
+    def GetFilesLookedAtBySession(self,session_id):
+        return self.cursor.execute("""SELECT DISTINCT fixation_target FROM fixation INNER JOIN gaze ON fixation.fixation_start_event_time = gaze.event_time WHERE session_id = ?""", (session_id,)).fetchall()
+
     # Gets the session from a fixation run
     #def GetSessionOfFixationRun(self,run_id):
     #    return self.cursor.execute("""SELECT session_id FROM fixation_run WHERE fixation_run_id = ?""", (run_id,)).fetchall()[0][0]
