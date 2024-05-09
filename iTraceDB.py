@@ -59,6 +59,11 @@ class iTraceDB:
     def GetAllRunFixations(self, run_id):
         return self.cursor.execute("""SELECT * FROM fixation WHERE fixation_run_id = ? ORDER BY fixation_start_event_time""", (run_id,)).fetchall()
 
+    # Returns all the fixations from a fixation run and on a certain file
+    def GetAllRunFixationsTargetingFile(self, run_id,target_file):
+        return self.cursor.execute("""SELECT * FROM fixation WHERE fixation_run_id = ? and fixation_target = ? ORDER BY fixation_start_event_time""", (run_id,target_file)).fetchall()
+
+
     # Returns a dictionary of fixation_gazes for the selected fixation_run
     def GetAllFixationGazes(self,fixations):
         all_fix_gazes = {}

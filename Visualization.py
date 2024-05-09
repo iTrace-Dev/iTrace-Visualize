@@ -103,13 +103,47 @@ def FindMatchingPath(all_files,target_file):
     return "/".join(possible[0])
 
 def FindTokenInElement(line,col,element):
-    element_line_start = int(element.attrib["pos:start"].split(":")[0])
-    element_col_start = int(element.attrib["pos:start"].split(":")[1])
-    element_line_end = int(element.attrib["pos:end"].split(":")[0])
-    element_col_end = int(element.attrib["pos:end"].split(":")[1])
+    print('\n-------------------------------------------')
+    #prev = None
+    prev = []
+    for elem in element.iter():
+        try:
+            element_line_start = int(elem.attrib["{http://www.srcML.org/srcML/position}start"].split(":")[0])
+            element_col_start = int(elem.attrib["{http://www.srcML.org/srcML/position}start"].split(":")[1])
+            element_line_end = int(elem.attrib["{http://www.srcML.org/srcML/position}end"].split(":")[0])
+            element_col_end = int(elem.attrib["{http://www.srcML.org/srcML/position}end"].split(":")[1])
+        except:
+            continue
 
-    for child in element:
-        FindTokenInElement(line,col,child)
+        if line >= element_line_start and line <= element_line_end and col >= element_col_start and col <= element_col_end and len(elem) == 0:
+            if " " in elem.text.replace("\n"," "):
+                text = elem.text
+                lines = text.split("\n")
+                line_num = line - element_line_start
+                text = lines[line_num]
+                if line_num != 0:
+                    search = col
+                    add = 0
+                else:
+                    search = col - element_col_start
+                    add = element_col_start - 1
+                print("-",text)
+                end_space = text.find(' ',search)
+                start_space = len(text)-text[::-1].find(' ',len(text)-search)
+                return ((line,start_space+1+add),(line,end_space+add))
+            else:
+                return ((element_line_start,element_col_start),(element_line_end,element_col_end))
+        elif line >= element_line_start and line <= element_line_end and col < element_col_start and col >= prev[-1][1]:
+            if element_col_end < prev[-1][4]:
+                return ((line,col),(line,col+len(prev[-1][0].text)))
+            elif element_col_start > prev[-1][4]:
+                i = -1
+                while prev[i][0].tail == None:
+                    i -=1
+                return ((line,col),(line,col+len(prev[i][0].tail)))
+
+        prev.append((elem,element_line_start,element_col_start,element_line_end,element_col_end))
+
 
 
 
@@ -790,8 +824,8 @@ class MyWidget(QtWidgets.QWidget):
         # At 28 Font size, bounding boxes are 17x28
         #    32 Font size, bounding boxes are 19x31
         font = ImageFont.truetype("cour.ttf",28)
-        H = 17
-        W = 28
+        W = 17
+        H = 28
 
 
         units = {}
@@ -815,27 +849,35 @@ class MyWidget(QtWidgets.QWidget):
             rows = len(lines)
             cols = max([len(line.rstrip()) for line in lines])
 
-            height = rows * W
-            width = cols * H
+            height = rows * H
+            width = cols * W
 
             img = np.zeros((height,width,3), dtype=np.uint8)
             img.fill(255)
 
+            img = Image.fromarray(img)
+            draw = ImageDraw.Draw(img)
 
-            draw_tokens = []
-            fixations = self.idb.GetAllRunFixations(fixation_run_id)
+            draw_tokens = {}
+            fixation_tups = self.idb.GetAllRunFixationsTargetingFile(fixation_run_id,target_file)
+            fixations = [Fixation(tup) for tup in fixation_tups]
             for fixation in fixations:
                 line_num = fixation.source_file_line
                 col_num = fixation.source_file_col
                 element = unit
-                
+                #print((line_num,col_num),"->",FindTokenInElement(line_num,col_num,unit))
+                coords = FindTokenInElement(line_num,col_num,unit)
+                if coords == None:
+                    coords = ((line_num,col_num),(line_num,col_num+1))
+                if coords not in draw_tokens:
+                    draw_tokens[coords] = 0
+                draw_tokens[coords] += 1
 
+            for area in draw_tokens:
+                #pos = (area[0][1]*W,area[0][0]*H,area[1][1]*W,area[1][0]*H)
+                draw.rectangle(area,fill=(255,0,0))
 
-
-
-
-            img = Image.fromarray(img)
-            draw = ImageDraw.Draw(img)
+            
             draw.text((0,0),src_str,(0,0,0),font=font)
             img = np.array(img)
 
