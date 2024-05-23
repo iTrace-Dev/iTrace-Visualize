@@ -5,9 +5,11 @@ import time
 import numpy as np
 import math
 import re
+import random
+import colorsys
 from PIL import Image, ImageFont, ImageDraw
 
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 from iTraceDB import iTraceDB
 from EyeDataTypes import Gaze, Fixation
 from TextDetector import get_text_boxes, highlight_frame
@@ -23,6 +25,7 @@ DEFAULT_ROLLING_WIN_SIZE = 1000 # Size of rolling window in miliseconds
 DEFAULT_GAZE_RADIUS = 5
 DEFAULT_FIXATION_RADIUS = 5
 DEFAULT_VID_SCALE = 1 # INCREASING THIS CAUSES THE VIDEO TO BECOME MUCH LONGER, AND HAVE MUCH MORE DETAIL
+DEFAULT_NUM_OF_COLORS = 5
 
 # Converts color string (rgb) to color tuple (bgr)
 def ConvertColorStringToTuple(color: "#XXXXXX") -> tuple[int]:
@@ -102,47 +105,73 @@ def FindMatchingPath(all_files,target_file):
         return None;
     return "/".join(possible[0])
 
+def GetLineAndCol(element):
+    try:
+        return (int(element.attrib["{http://www.srcML.org/srcML/position}start"].split(":")[0]),
+                int(element.attrib["{http://www.srcML.org/srcML/position}start"].split(":")[1]),
+                int(element.attrib["{http://www.srcML.org/srcML/position}end"].split(":")[0]),
+                int(element.attrib["{http://www.srcML.org/srcML/position}end"].split(":")[1]))
+    except:
+        xml_remover = re.compile("<.*?>")
+        text = xml_remover.sub('',ET.tostring(element).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
+        return (1,1,len(text.split("\n")),max([len(x.rstrip()) for x in text.split("\n")]))
+
+def GetTokenStartPoint(line_start,col_start,elements):
+    xml_remover = re.compile("<.*?>")
+    for element in elements:
+        if type(element) == str:
+            s = element
+        else:
+            s = xml_remover.sub('',ET.tostring(element).decode())
+        s = s.replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
+        lines = s.split('\n')
+        if len(lines) > 1:
+            line_start += len(lines) - 1
+            col_start = 0
+        col_start += len(lines[-1])
+    return line_start, col_start
+
+
+SINGLE_CHAR_TOKENS = ["{","}","[","]","(",")","'",'"',".",",",";"]
 def FindTokenInElement(line,col,element):
-    print('\n-------------------------------------------')
-    #prev = None
-    prev = []
-    for elem in element.iter():
-        try:
-            element_line_start = int(elem.attrib["{http://www.srcML.org/srcML/position}start"].split(":")[0])
-            element_col_start = int(elem.attrib["{http://www.srcML.org/srcML/position}start"].split(":")[1])
-            element_line_end = int(elem.attrib["{http://www.srcML.org/srcML/position}end"].split(":")[0])
-            element_col_end = int(elem.attrib["{http://www.srcML.org/srcML/position}end"].split(":")[1])
-        except:
-            continue
+    print("*",line,col)
+    xml_remover = re.compile("<.*?>")
+    text = xml_remover.sub('',ET.tostring(element).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
+    lines = text.split("\n")
+    token_line = lines[line - 1]
 
-        if line >= element_line_start and line <= element_line_end and col >= element_col_start and col <= element_col_end and len(elem) == 0:
-            if " " in elem.text.replace("\n"," "):
-                text = elem.text
-                lines = text.split("\n")
-                line_num = line - element_line_start
-                text = lines[line_num]
-                if line_num != 0:
-                    search = col
-                    add = 0
-                else:
-                    search = col - element_col_start
-                    add = element_col_start - 1
-                print("-",text)
-                end_space = text.find(' ',search)
-                start_space = len(text)-text[::-1].find(' ',len(text)-search)
-                return ((line,start_space+1+add),(line,end_space+add))
-            else:
-                return ((element_line_start,element_col_start),(element_line_end,element_col_end))
-        elif line >= element_line_start and line <= element_line_end and col < element_col_start and col >= prev[-1][1]:
-            if element_col_end < prev[-1][4]:
-                return ((line,col),(line,col+len(prev[-1][0].text)))
-            elif element_col_start > prev[-1][4]:
-                i = -1
-                while prev[i][0].tail == None:
-                    i -=1
-                return ((line,col),(line,col+len(prev[i][0].tail)))
+    if col > len(token_line):
+        #return ((line,col),(line,col))
+        return
 
-        prev.append((elem,element_line_start,element_col_start,element_line_end,element_col_end))
+    char = token_line[col - 1]
+    if char.isspace():
+        return
+    elif char in SINGLE_CHAR_TOKENS:
+        return ((line,col),(line,col))
+    elif char.isalnum():
+        mode = "word"
+    else:
+        mode = "op"
+
+    start = col - 1
+    end = col - 1
+
+    print("|"+char+"|",mode,token_line)
+
+    while token_line[start].isalnum() if mode == "word" else ((not token_line[start].isalnum()) and (not token_line[start].isspace()) and (token_line[start] not in SINGLE_CHAR_TOKENS)):
+        start -= 1
+        if start < 0:
+            start = -1
+            break
+
+    while token_line[end].isalnum() if mode == "word" else ((not token_line[end].isalnum()) and (not token_line[end].isspace()) and (token_line[end] not in SINGLE_CHAR_TOKENS)):
+        end += 1
+        if end > len(token_line) - 1:
+            end = len(token_line)
+            break
+    print("|"+str(line),str(start),str(end)+"|")
+    return ((line,start+2),(line,end))
 
 
 
@@ -200,6 +229,8 @@ class MyWidget(QtWidgets.QWidget):
         self.saccadeColor = (255,255,255)
         self.fixationColor = (0,0,255)
         self.highlightColor = (255,0,0)
+        self.startColor = (0,0,255)
+        self.endColor = (0,255,0)
 
         # Tabs
         self.tab_widget = QtWidgets.QTabWidget(self)
@@ -379,12 +410,44 @@ class MyWidget(QtWidgets.QWidget):
         self.code_layout.addWidget(self.srcml_load_button,4,0)
         self.code_layout.addWidget(self.srcml_loaded_text,3,0)
 
-        self.video_layout.setRowMinimumHeight(5,10)
+        self.code_layout.setRowMinimumHeight(5,10)
+
+        self.code_layout.setColumnMinimumWidth(1,23)
+
+        # Start Color Picker Button
+        self.color_picker_button_start = QtWidgets.QPushButton("Start color", self)
+        self.color_picker_button_start.clicked.connect(self.startPickerClicked)
+        self.code_layout.addWidget(self.color_picker_button_start,6,0)
+        self.color_picker_text_start = QtWidgets.QLabel("", self)
+        self.color_picker_text_start.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.startColor)}; }}")
+        self.color_picker_text_start.setGeometry(115, 200, 23, 23)
+        self.code_layout.addWidget(self.color_picker_text_start,6,1)
+
+        # End Color Picker Button
+        self.color_picker_button_end = QtWidgets.QPushButton("End color", self)
+        self.color_picker_button_end.clicked.connect(self.endPickerClicked)
+        self.code_layout.addWidget(self.color_picker_button_end,7,0)
+        self.color_picker_text_end = QtWidgets.QLabel("", self)
+        self.color_picker_text_end.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.endColor)}; }}")
+        self.color_picker_text_end.setGeometry(115, 200, 23, 23)
+        self.code_layout.addWidget(self.color_picker_text_end,7,1)
+
+        # Number of colors
+        self.color_number_box = QtWidgets.QLineEdit(self)
+        self.color_number_box.setMaximumWidth(23)
+        self.color_number_box.setGeometry(620,400,25,20)
+        self.color_number_box.setValidator(QtGui.QIntValidator())
+        self.color_number_box.setText(str(DEFAULT_NUM_OF_COLORS))
+        self.code_layout.addWidget(self.color_number_box,8,1)
+        self.color_number_text = QtWidgets.QLabel("# of colors",self)
+        self.code_layout.addWidget(self.color_number_text,8,0)
+
+        self.code_layout.setRowMinimumHeight(9,10)
 
         # Process Button
         self.process_code_button = QtWidgets.QPushButton("Process Image",self)
         self.process_code_button.clicked.connect(self.generateCodeHeatmap)
-        self.code_layout.addWidget(self.process_code_button,6,0)
+        self.code_layout.addWidget(self.process_code_button,10,0)
 
         # Session List
         self.code_session_list = QtWidgets.QListWidget(self)
@@ -593,6 +656,30 @@ class MyWidget(QtWidgets.QWidget):
         if color != self.saccadeColor:
             self.saccadeColor = ConvertColorStringToTuple(color)
             self.color_picker_text_saccade.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.saccadeColor)}; }}")
+
+    def startPickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.startColor:
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.startColor)))
+        if dialog.exec():
+            self.setStartColor(dialog.currentColor().name())
+
+    def setStartColor(self, color): # Sets color option
+        if color != self.startColor:
+            self.startColor = ConvertColorStringToTuple(color)
+            self.color_picker_text_start.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.startColor)}; }}")
+
+    def endPickerClicked(self): # Show color picker dialog/save color option
+        dialog = QtWidgets.QColorDialog(self)
+        if self.endColor:
+            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.endColor)))
+        if dialog.exec():
+            self.setEndColor(dialog.currentColor().name())
+
+    def setEndColor(self, color): # Sets color option
+        if color != self.endColor:
+            self.endColor = ConvertColorStringToTuple(color)
+            self.color_picker_text_end.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.endColor)}; }}")
 
     def fixationPickerClicked(self): # Show color picker dialog/save color option
         dialog = QtWidgets.QColorDialog(self)
@@ -823,9 +910,9 @@ class MyWidget(QtWidgets.QWidget):
         xml_remover = re.compile("<.*?>")
         # At 28 Font size, bounding boxes are 17x28
         #    32 Font size, bounding boxes are 19x31
-        font = ImageFont.truetype("cour.ttf",28)
-        W = 17
-        H = 28
+        font = ImageFont.truetype("cour.ttf",32)
+        W = 19
+        H = 31
 
 
         units = {}
@@ -839,6 +926,8 @@ class MyWidget(QtWidgets.QWidget):
         for target_file in gazed_files:
             print(target_file)
             unit_target = FindMatchingPath(list(units.keys()),target_file)
+            if unit_target == None:
+                continue
             unit = units[unit_target]
 
             # Create blank file
@@ -861,27 +950,70 @@ class MyWidget(QtWidgets.QWidget):
             draw_tokens = {}
             fixation_tups = self.idb.GetAllRunFixationsTargetingFile(fixation_run_id,target_file)
             fixations = [Fixation(tup) for tup in fixation_tups]
+            print("FIXES:",len(fixations))
+            # fixations = [None]
             for fixation in fixations:
                 line_num = fixation.source_file_line
                 col_num = fixation.source_file_col
+
+                if line_num == -1 or col_num == -1:
+                    continue
+
                 element = unit
                 #print((line_num,col_num),"->",FindTokenInElement(line_num,col_num,unit))
+                print("\n---------------------------------")
                 coords = FindTokenInElement(line_num,col_num,unit)
+
                 if coords == None:
-                    coords = ((line_num,col_num),(line_num,col_num+1))
+                    print(line_num,col_num,"???")
+                    continue
+                    # coords = ((line_num,col_num),(line_num,col_num))
+
                 if coords not in draw_tokens:
                     draw_tokens[coords] = 0
-                draw_tokens[coords] += 1
+                # draw_tokens[coords] += 1
+                draw_tokens[coords] += fixation.duration
 
-            for area in draw_tokens:
-                #pos = (area[0][1]*W,area[0][0]*H,area[1][1]*W,area[1][0]*H)
-                draw.rectangle(area,fill=(255,0,0))
+            start_color = self.startColor
+            end_color = self.endColor
 
-            
+            num_of_colors = int(self.color_number_box.text())
+
+            # colors = [start_color]
+            # b_step,g_step,r_step = (end_color[0] - start_color[0]) / (num_of_colors - 1), (end_color[1] - start_color[1]) / (num_of_colors - 1), (end_color[2] - start_color[2]) / (num_of_colors - 1)
+            # for i in range(1,num_of_colors):
+            #     colors.append((int(start_color[0] + (b_step * i)), int(start_color[1] + (g_step * i)), int(start_color[2] + (r_step * i))))
+            hsv_start = 270
+            hsv_end = 0
+            step = (hsv_end - hsv_start) / (num_of_colors - 1)
+            colors = []
+            for i in range(0,num_of_colors):
+                rgb = colorsys.hsv_to_rgb((hsv_start + (step * i)) / 360,0.5,1)
+                colors.append((int(rgb[2]*255),int(rgb[1]*255),int(rgb[0]*255)))
+                print("RGB",(colors[-1][2],colors[-1][1],colors[-1][0]),step,i)
+
+            if len(list(draw_tokens.values())) != 0:
+                min_count = min(list(draw_tokens.values()))
+                max_count = max(list(draw_tokens.values()))
+                step = (max_count - min_count) / (len(colors) - 1)
+
+                for coords in draw_tokens:
+                    pos = ((coords[0][1]-1)*W,(coords[0][0]-1)*H,(coords[1][1]*W)-1,(coords[1][0]*H)-1)
+                    count = draw_tokens[coords]
+                    print(pos)
+                    print("!",min_count,max_count,step,count)
+                    # print(int((count - min_count) / step))
+                    color = colors[int((count - min_count) / step) if step != 0 else -1]
+                    
+                    draw.rectangle(pos,fill=color)
+
+            print(colors)
             draw.text((0,0),src_str,(0,0,0),font=font)
             img = np.array(img)
 
-            cv2.imwrite(output_folder_name+"/"+file+".png",img)
+            cv2.imwrite(f"{output_folder_name}/{file}.png",img)
+
+        print("DONE!")
 
 
 
