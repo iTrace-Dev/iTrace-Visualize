@@ -134,7 +134,7 @@ def GetTokenStartPoint(line_start,col_start,elements):
 
 SINGLE_CHAR_TOKENS = ["{","}","[","]","(",")","'",'"',".",",",";"]
 def FindTokenInElement(line,col,element):
-    print("*",line,col)
+    # print("*",line,col)
     xml_remover = re.compile("<.*?>")
     text = xml_remover.sub('',ET.tostring(element).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
     lines = text.split("\n")
@@ -157,7 +157,7 @@ def FindTokenInElement(line,col,element):
     start = col - 1
     end = col - 1
 
-    print("|"+char+"|",mode,token_line)
+    # print("|"+char+"|",mode,token_line)
 
     while token_line[start].isalnum() if mode == "word" else ((not token_line[start].isalnum()) and (not token_line[start].isspace()) and (token_line[start] not in SINGLE_CHAR_TOKENS)):
         start -= 1
@@ -170,7 +170,7 @@ def FindTokenInElement(line,col,element):
         if end > len(token_line) - 1:
             end = len(token_line)
             break
-    print("|"+str(line),str(start),str(end)+"|")
+    # print("|"+str(line),str(start),str(end)+"|")
     return ((line,start+2),(line,end))
 
 
@@ -208,10 +208,13 @@ class MyWidget(QtWidgets.QWidget):
         self.setWindowIcon(QtGui.QIcon("Visualize.png"))
 
         # Major File Data
-        self.idb = None
+        self.video_idb = None
+        self.code_idb = None
+        self.graph_idb = None
         self.video = None
         self.dejavu = None
-        self.srcml = None
+        self.code_srcml = None
+        self.graph_srcml = None
 
         # Time variables
         self.selected_session_time = 0
@@ -243,11 +246,18 @@ class MyWidget(QtWidgets.QWidget):
         self.code_layout = QtWidgets.QGridLayout()
         self.code_tab.setLayout(self.code_layout)
 
+        self.graph_tab = QtWidgets.QWidget()
+        self.graph_layout = QtWidgets.QGridLayout()
+        self.graph_tab.setLayout(self.graph_layout)
+
+        # Inner File Tabs
+        self.file_tabs = {}
+
 # Video Tab
 ############################################################################
         # Load DB Button
         self.video_db_load_button = QtWidgets.QPushButton("Select Database", self)
-        self.video_db_load_button.clicked.connect(self.databaseButtonClicked)
+        self.video_db_load_button.clicked.connect(self.videoDatabaseButtonClicked)
         self.video_db_loaded_text = QtWidgets.QLabel("No Database Loaded", self)
         self.video_layout.addWidget(self.video_db_load_button,1,0)
         self.video_layout.addWidget(self.video_db_loaded_text,0,0)
@@ -258,7 +268,7 @@ class MyWidget(QtWidgets.QWidget):
 
         # Session List
         self.video_session_list = QtWidgets.QListWidget(self)
-        self.video_session_list.itemClicked.connect(self.sessionLoadClicked)
+        self.video_session_list.itemClicked.connect(self.videoSessionLoadClicked)
         self.video_layout.addWidget(self.video_session_list,1,3,10,10)
         self.video_session_list_text = QtWidgets.QLabel("Sessions", self)
         self.video_layout.addWidget(self.video_session_list_text,0,3)
@@ -266,7 +276,7 @@ class MyWidget(QtWidgets.QWidget):
 
         # Fixation Run List
         self.video_fixation_runs_list = QtWidgets.QListWidget(self)
-        self.video_fixation_runs_list.itemClicked.connect(self.fixationRunClicked)
+        self.video_fixation_runs_list.itemClicked.connect(self.videoFixationRunClicked)
         self.video_layout.addWidget(self.video_fixation_runs_list,1,13,10,10)
         self.video_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
         self.video_layout.addWidget(self.video_fixation_runs_list_text,0,13)
@@ -391,46 +401,33 @@ class MyWidget(QtWidgets.QWidget):
         self.elapsed_time_text = QtWidgets.QLabel("00:00:00",self)
         self.video_layout.addWidget(self.elapsed_time_text,16,1,1,3)
 
-# Video Tab
+# Heatmap Tab
 ############################################################################
 
         # DB Button
         self.code_db_load_button = QtWidgets.QPushButton("Select Database", self)
-        self.code_db_load_button.clicked.connect(self.databaseButtonClicked)
+        self.code_db_load_button.clicked.connect(self.codeDatabaseButtonClicked)
         self.code_db_loaded_text = QtWidgets.QLabel("No Database Loaded", self)
         self.code_layout.addWidget(self.code_db_load_button,1,0)
         self.code_layout.addWidget(self.code_db_loaded_text,0,0)
 
-        self.video_layout.setRowMinimumHeight(2,10)
+        self.code_layout.setRowMinimumHeight(2,10)
+
+        self.time_process_box = QtWidgets.QCheckBox("Process Time",self)
+        self.time_process_box.setChecked(False)
+        self.code_layout.addWidget(self.time_process_box,2,0)
+
+        self.average_runs = QtWidgets.QCheckBox("Average Runs",self)
+        self.average_runs.setChecked(False)
+        self.code_layout.addWidget(self.average_runs,3,0)
 
         # srcML Button
-        self.srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
-        self.srcml_load_button.clicked.connect(self.srcmlButtonClicked)
-        self.srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
-        self.code_layout.addWidget(self.srcml_load_button,4,0)
-        self.code_layout.addWidget(self.srcml_loaded_text,3,0)
+        self.code_srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
+        self.code_srcml_load_button.clicked.connect(self.codeSrcmlButtonClicked)
+        self.code_srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
+        self.code_layout.addWidget(self.code_srcml_load_button,5,0)
+        self.code_layout.addWidget(self.code_srcml_loaded_text,4,0)
 
-        self.code_layout.setRowMinimumHeight(5,10)
-
-        self.code_layout.setColumnMinimumWidth(1,23)
-
-        # Start Color Picker Button
-        self.color_picker_button_start = QtWidgets.QPushButton("Start color", self)
-        self.color_picker_button_start.clicked.connect(self.startPickerClicked)
-        self.code_layout.addWidget(self.color_picker_button_start,6,0)
-        self.color_picker_text_start = QtWidgets.QLabel("", self)
-        self.color_picker_text_start.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.startColor)}; }}")
-        self.color_picker_text_start.setGeometry(115, 200, 23, 23)
-        self.code_layout.addWidget(self.color_picker_text_start,6,1)
-
-        # End Color Picker Button
-        self.color_picker_button_end = QtWidgets.QPushButton("End color", self)
-        self.color_picker_button_end.clicked.connect(self.endPickerClicked)
-        self.code_layout.addWidget(self.color_picker_button_end,7,0)
-        self.color_picker_text_end = QtWidgets.QLabel("", self)
-        self.color_picker_text_end.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.endColor)}; }}")
-        self.color_picker_text_end.setGeometry(115, 200, 23, 23)
-        self.code_layout.addWidget(self.color_picker_text_end,7,1)
 
         # Number of colors
         self.color_number_box = QtWidgets.QLineEdit(self)
@@ -451,34 +448,77 @@ class MyWidget(QtWidgets.QWidget):
 
         # Session List
         self.code_session_list = QtWidgets.QListWidget(self)
-        self.code_session_list.itemClicked.connect(self.sessionLoadClicked)
+        self.code_session_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
+        self.code_session_list.itemClicked.connect(self.codeSessionLoadClicked)
         self.code_layout.addWidget(self.code_session_list,1,3,10,10)
         self.code_session_list_text = QtWidgets.QLabel("Sessions", self)
         self.code_layout.addWidget(self.code_session_list_text,0,3)
 
         # Fixation Run List
         self.code_fixation_runs_list = QtWidgets.QListWidget(self)
-        self.code_fixation_runs_list.itemClicked.connect(self.fixationRunClicked)
+        self.code_fixation_runs_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
+        self.code_fixation_runs_list.itemClicked.connect(self.codeFixationRunClicked)
         self.code_layout.addWidget(self.code_fixation_runs_list,1,13,10,10)
         self.code_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
         self.code_layout.addWidget(self.code_fixation_runs_list_text,0,13)
 
 
 
+# Graph Tab
+############################################################################
+        # DB Button
+        self.graph_db_load_button = QtWidgets.QPushButton("Select Database", self)
+        self.graph_db_load_button.clicked.connect(self.graphDatabaseButtonClicked)
+        self.graph_db_loaded_text = QtWidgets.QLabel("No Database Loaded", self)
+        self.graph_layout.addWidget(self.graph_db_load_button,1,0)
+        self.graph_layout.addWidget(self.graph_db_loaded_text,0,0)
 
-        self.tab_widget.addTab(self.video_tab,'Video')
-        self.tab_widget.addTab(self.code_tab,'Source Code')
+        # srcML Button
+        self.graph_srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
+        self.graph_srcml_load_button.clicked.connect(self.graphSrcmlButtonClicked)
+        self.graph_srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
+        self.graph_layout.addWidget(self.graph_srcml_load_button,5,0)
+        self.graph_layout.addWidget(self.graph_srcml_loaded_text,4,0)
+
+        # Session List
+        self.graph_session_list = QtWidgets.QListWidget(self)
+        self.graph_session_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
+        self.graph_session_list.itemClicked.connect(self.graphSessionLoadClicked)
+        self.graph_layout.addWidget(self.graph_session_list,1,3,10,10)
+        self.graph_session_list_text = QtWidgets.QLabel("Sessions", self)
+        self.graph_layout.addWidget(self.graph_session_list_text,0,3)
+
+        # Fixation Run List
+        self.graph_fixation_runs_list = QtWidgets.QListWidget(self)
+        self.graph_fixation_runs_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
+        self.graph_fixation_runs_list.itemClicked.connect(self.graphFixationRunClicked)
+        self.graph_layout.addWidget(self.graph_fixation_runs_list,1,13,10,10)
+        self.graph_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
+        self.graph_layout.addWidget(self.graph_fixation_runs_list_text,0,13)
+
+
+        self.graph_aoi_list = QtWidgets.QTabWidget(self)
+        self.graph_layout.addWidget(self.graph_aoi_list,1,26,10,10)
+        self.graph_aoi_list_text = QtWidgets.QLabel("Files", self)
+        self.graph_layout.addWidget(self.graph_aoi_list_text,0,26)
+
+
+
+
+        self.tab_widget.addTab(self.video_tab,'Gaze Cloud Video')
+        self.tab_widget.addTab(self.code_tab,'Tokenized Heatmap')
+        self.tab_widget.addTab(self.graph_tab,'Graphs')
 
 
 
 
 
-    def databaseButtonClicked(self): # Load Database
+    def videoDatabaseButtonClicked(self): # Load Database
         db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
         if(db_file_path == ''):
             return
         try:
-            self.idb = iTraceDB(db_file_path)
+            self.video_idb = iTraceDB(db_file_path)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
             return
@@ -486,49 +526,171 @@ class MyWidget(QtWidgets.QWidget):
         if len(display_name) > 20:
             display_name = display_name[:20]
         self.video_db_loaded_text.setText(display_name)
-        self.code_db_loaded_text.setText(display_name)
         self.video_session_list.clear()
-        self.code_session_list.clear()
         self.video_fixation_runs_list.clear()
+
+        sessions = self.video_idb.GetSessions()
+        self.video_session_list.addItems(sessions)
+
+    def codeDatabaseButtonClicked(self): # Load Database
+        db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
+        if(db_file_path == ''):
+            return
+        try:
+            self.code_idb = iTraceDB(db_file_path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            return
+        display_name = db_file_path.split("/")[-1]
+        if len(display_name) > 20:
+            display_name = display_name[:20]
+        self.code_db_loaded_text.setText(display_name)
+        self.code_session_list.clear()
         self.code_fixation_runs_list.clear()
 
-        sessions = self.idb.GetSessions()
-        self.video_session_list.addItems(sessions)
+        sessions = self.code_idb.GetSessionsWithParticipantID()
         self.code_session_list.addItems(sessions)
 
-    def srcmlButtonClicked(self): # Load srcML
+    def graphDatabaseButtonClicked(self): # Load Database
+        db_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite Files (*.db3 *.db *.sqlite *sqlite3)")[0]
+        if(db_file_path == ''):
+            return
+        try:
+            self.graph_idb = iTraceDB(db_file_path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            return
+        display_name = db_file_path.split("/")[-1]
+        if len(display_name) > 20:
+            display_name = display_name[:20]
+        self.graph_db_loaded_text.setText(display_name)
+        self.graph_session_list.clear()
+        self.graph_fixation_runs_list.clear()
+
+        sessions = self.graph_idb.GetSessionsWithParticipantID()
+        self.graph_session_list.addItems(sessions)
+
+    def codeSrcmlButtonClicked(self): # Load srcML
         srcml_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open srcML Archive","","srcML Files (*.xml *.srcml)")[0]
         if(srcml_file_path == ''):
             return
         try:
-            self.srcml = ET.parse(srcml_file_path)
+            self.code_srcml = ET.parse(srcml_file_path)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
             return
-        print(self.srcml.getroot().attrib)
-        if("filename" in self.srcml.getroot().attrib):
+        print(self.code_srcml.getroot().attrib)
+        if("filename" in self.code_srcml.getroot().attrib):
             QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
             self.video = None
             return
         display_name = srcml_file_path.split("/")[-1]
         if len(display_name) > 20:
             display_name = display_name[:20]
-        self.srcml_loaded_text.setText(display_name)
+        self.code_srcml_loaded_text.setText(display_name)
 
-    def sessionLoadClicked(self, item):  # Select Session
+    def graphSrcmlButtonClicked(self): # Load srcML
+        srcml_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open srcML Archive","","srcML Files (*.xml *.srcml)")[0]
+        if(srcml_file_path == ''):
+            return
+        try:
+            self.graph_srcml = ET.parse(srcml_file_path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            return
+        print(self.graph_srcml.getroot().attrib)
+        if("filename" in self.graph_srcml.getroot().attrib):
+            QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
+            self.video = None
+            return
+        display_name = srcml_file_path.split("/")[-1]
+        if len(display_name) > 20:
+            display_name = display_name[:20]
+        self.graph_srcml_loaded_text.setText(display_name)
+        self.createFileTabs()
+
+    def videoSessionLoadClicked(self, item):  # Select Session
         session_id = int(item.text().split(" - ")[1])
 
         self.video_fixation_runs_list.clear()
-        self.video_fixation_runs_list.addItems(self.idb.GetFixationRuns(session_id))
+        self.video_fixation_runs_list.addItems(self.video_idb.GetFixationRuns(session_id))
 
-        self.code_fixation_runs_list.clear()
-        self.code_fixation_runs_list.addItems(self.idb.GetFixationRuns(session_id))
+        self.selected_session_time = self.video_idb.GetSessionTimeLength(session_id)
+        self.session_start_time = self.video_idb.GetSessionStartTime(session_id)
 
-        self.selected_session_time = self.idb.GetSessionTimeLength(session_id)
-        self.session_start_time = self.idb.GetSessionStartTime(session_id)
+    def codeSessionLoadClicked(self, item):  # Select Session
+        particpant_id = item.text().split(" - ")[0]
+        task_name = item.text().split(" - ")[1]
+        session_id = int(item.text().split(" - ")[2])
 
-    def fixationRunClicked(self, item):  # Select Fixation Run (Doesn't currently do anything extra)
+        selected = self.code_session_list.selectedItems()
+        fixation_runs = self.code_idb.GetFixationRunsWithSession(session_id)
+        list_id = f"----------- {particpant_id} - {task_name} -----------"
+        print(self.code_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly))
+        if item not in selected:
+            self.code_fixation_runs_list.takeItem(self.code_fixation_runs_list.row(self.code_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly)[0]))
+
+            for run in fixation_runs:
+                self.code_fixation_runs_list.takeItem(self.code_fixation_runs_list.row(self.code_fixation_runs_list.findItems(run,QtCore.Qt.MatchExactly)[0]))
+        else:
+            # self.code_fixation_runs_list.clear()
+            self.code_fixation_runs_list.addItem(list_id)
+            self.code_fixation_runs_list.addItems(fixation_runs)
+
+    def graphSessionLoadClicked(self, item):  # Select Session
+        particpant_id = item.text().split(" - ")[0]
+        task_name = item.text().split(" - ")[1]
+        session_id = int(item.text().split(" - ")[2])
+
+        selected = self.graph_session_list.selectedItems()
+        fixation_runs = self.graph_idb.GetFixationRunsWithSession(session_id)
+        list_id = f"----------- {particpant_id} - {task_name} -----------"
+        print(self.graph_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly))
+        if item not in selected:
+            self.graph_fixation_runs_list.takeItem(self.graph_fixation_runs_list.row(self.graph_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly)[0]))
+
+            for run in fixation_runs:
+                self.graph_fixation_runs_list.takeItem(self.graph_fixation_runs_list.row(self.graph_fixation_runs_list.findItems(run,QtCore.Qt.MatchExactly)[0]))
+        else:
+            # self.code_fixation_runs_list.clear()
+            self.graph_fixation_runs_list.addItem(list_id)
+            self.graph_fixation_runs_list.addItems(fixation_runs)
+
+        if self.graph_srcml != None:
+            self.createFileTabs()
+
+    def videoFixationRunClicked(self, item):  # Select Fixation Run (Doesn't currently do anything extra)
         pass
+
+    def codeFixationRunClicked(self, item):  
+        if item.text().startswith("-----------") and item in self.code_fixation_runs_list.selectedItems():
+            item.setSelected(False)
+
+    def graphFixationRunClicked(self, item):  
+        if item.text().startswith("-----------") and item in self.graph_fixation_runs_list.selectedItems():
+            item.setSelected(False)
+
+    def createFileTabs(self):
+        self.file_tabs = {}
+
+        sessions = self.graph_session_list.selectedItems()
+        if len(sessions) == 0:
+            return
+
+        db_files = set()
+        for session in sessions:
+            db_files |= set([x[0].split("/")[-1] for x in self.graph_idb.GetFilesLookedAtBySession(session.text().split(" - ")[2])])
+        print(db_files)
+        # srcml_root = self.graph_srcml.getroot()
+        # units = {}
+        # for unit in srcml_root:
+        #     units[unit.attrib["filename"]] = unit
+
+        # files = [FindMatchingPath(list(units.keys()), file) for file in db_files]
+        # print(files)
+
+
+
 
     def videoLoadClicked(self): # Load Video
         video_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open Database", "", "Video Files (*.flv *.mp4 *.mov *.mkv);;All Files (*.*)")[0]
@@ -600,7 +762,7 @@ class MyWidget(QtWidgets.QWidget):
         t = time.time()
         print("Gathering Gazes, ",end="")
         
-        gaze_tups = self.idb.GetAllSessionGazes(session_id)
+        gaze_tups = self.video_idb.GetAllSessionGazes(session_id)
         gazes = [Gaze(tup) for tup in gaze_tups]
         print("Len:",len(gazes),"Elapsed:",time.time()-t)
 
@@ -609,7 +771,7 @@ class MyWidget(QtWidgets.QWidget):
             t = time.time()
             print("Gathering Fixations, ",end="")
             fixation_run_id = int(self.video_fixation_runs_list.selectedItems()[0].text().split(" - ")[1])
-            fixation_tups = self.idb.GetAllRunFixations(fixation_run_id)
+            fixation_tups = self.video_idb.GetAllRunFixations(fixation_run_id)
             fixations = [Fixation(tup) for tup in fixation_tups]
             print("Len:",len(fixations),"Elapsed:",time.time()-t)
 
@@ -617,14 +779,14 @@ class MyWidget(QtWidgets.QWidget):
         if False: #self.draw_fixation_gazes_box.isChecked():
             t = time.time()
             print("Gathering Fixation Gazes, ",end="")
-            fixation_gazes = self.idb.GetAllFixationGazes(fixations)
+            fixation_gazes = self.video_idb.GetAllFixationGazes(fixations)
             print("Len:",len(fixation_gazes),"Elapsed:",time.time()-t)
 
         saccades = None
         if self.draw_saccade_box.isChecked():
             t = time.time()
             print("Gathering Saccades, ",end="")
-            saccades = GetSaccadesOfGazesAndFixationGazes(self.idb, gazes, fixation_gazes if fixation_gazes is not None else self.idb.GetAllFixationGazes(fixations))
+            saccades = GetSaccadesOfGazesAndFixationGazes(self.video_idb, gazes, fixation_gazes if fixation_gazes is not None else self.video_idb.GetAllFixationGazes(fixations))
             print("Len:",len(saccades),"Elapsed:",time.time()-t)
 
         if self.dejavu:
@@ -656,30 +818,6 @@ class MyWidget(QtWidgets.QWidget):
         if color != self.saccadeColor:
             self.saccadeColor = ConvertColorStringToTuple(color)
             self.color_picker_text_saccade.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.saccadeColor)}; }}")
-
-    def startPickerClicked(self): # Show color picker dialog/save color option
-        dialog = QtWidgets.QColorDialog(self)
-        if self.startColor:
-            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.startColor)))
-        if dialog.exec():
-            self.setStartColor(dialog.currentColor().name())
-
-    def setStartColor(self, color): # Sets color option
-        if color != self.startColor:
-            self.startColor = ConvertColorStringToTuple(color)
-            self.color_picker_text_start.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.startColor)}; }}")
-
-    def endPickerClicked(self): # Show color picker dialog/save color option
-        dialog = QtWidgets.QColorDialog(self)
-        if self.endColor:
-            dialog.setCurrentColor(QtGui.QColor(ConvertColorTupleToString(self.endColor)))
-        if dialog.exec():
-            self.setEndColor(dialog.currentColor().name())
-
-    def setEndColor(self, color): # Sets color option
-        if color != self.endColor:
-            self.endColor = ConvertColorStringToTuple(color)
-            self.color_picker_text_end.setStyleSheet(f"QLabel {{ background-color : {ConvertColorTupleToString(self.endColor)}; }}")
 
     def fixationPickerClicked(self): # Show color picker dialog/save color option
         dialog = QtWidgets.QColorDialog(self)
@@ -895,94 +1033,121 @@ class MyWidget(QtWidgets.QWidget):
             return -1
 
     def generateCodeHeatmap(self):
-        if(self.idb == None or self.srcml == None or len(self.code_fixation_runs_list.selectedItems()) == 0):
+        if(self.code_idb == None or self.code_srcml == None or len(self.code_fixation_runs_list.selectedItems()) == 0):
             QtWidgets.QMessageBox.critical(self, "Error", "You are missing a required component")
             return
-        srcml_root = self.srcml.getroot()
+        srcml_root = self.code_srcml.getroot()
 
         output_folder_name = QtWidgets.QFileDialog.getExistingDirectory(self,"Open Directory")
         if not output_folder_name:
             return
 
-        session_id = int(self.code_session_list.selectedItems()[0].text().split(" - ")[1])
-        fixation_run_id = int(self.code_fixation_runs_list.selectedItems()[0].text().split(" - ")[1])
+        output_data = {}
+        text_data = {}
 
-        xml_remover = re.compile("<.*?>")
-        # At 28 Font size, bounding boxes are 17x28
-        #    32 Font size, bounding boxes are 19x31
-        font = ImageFont.truetype("cour.ttf",32)
-        W = 19
-        H = 31
+        for fixation_run in self.code_fixation_runs_list.selectedItems():
 
+            fixation_run_id = int(fixation_run.text().split(" - ")[1])
+            session_id = int(fixation_run.text().split(" - ")[2])
 
-        units = {}
+            xml_remover = re.compile("<.*?>")
+            # At 28 Font size, bounding boxes are 17x28
+            #    32 Font size, bounding boxes are 19x31
+            font = ImageFont.truetype("cour.ttf",32)
+            W = 19
+            H = 31
 
-        for unit in srcml_root:
-            units[unit.attrib["filename"]] = unit
+            units = {}
 
-        gazed_files = [x[0] for x in self.idb.GetFilesLookedAtBySession(session_id)]
-        print(gazed_files)
+            for unit in srcml_root:
+                units[unit.attrib["filename"]] = unit
 
-        for target_file in gazed_files:
-            print(target_file)
-            unit_target = FindMatchingPath(list(units.keys()),target_file)
-            if unit_target == None:
-                continue
-            unit = units[unit_target]
+            gazed_files = [x[0] for x in self.code_idb.GetFilesLookedAtBySession(session_id)]
+            print(gazed_files)
+
+            for target_file in gazed_files:
+                print(target_file)
+                unit_target = FindMatchingPath(list(units.keys()),target_file)
+                print(target_file,"->",unit_target)
+                if unit_target == None:
+                    continue
+                unit = units[unit_target]
+
+                file = unit.attrib["filename"].split("/")[-1]
+                src_str = xml_remover.sub('',ET.tostring(unit).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
+
+                lines = src_str.split("\n")
+                rows = len(lines)
+                cols = max([len(line.rstrip()) for line in lines])
+
+                height = rows * H
+                width = cols * W
+
+                
+
+                draw_tokens = {}
+                fixation_tups = self.code_idb.GetAllRunFixationsTargetingFile(fixation_run_id,target_file)
+                fixations = [Fixation(tup) for tup in fixation_tups]
+                print("FIXES:",len(fixations))
+                # fixations = [None]
+                for fixation in fixations:
+                    line_num = fixation.source_file_line
+                    col_num = fixation.source_file_col
+
+                    if line_num == -1 or col_num == -1:
+                        continue
+
+                    element = unit
+                    #print((line_num,col_num),"->",FindTokenInElement(line_num,col_num,unit))
+                    # print("\n---------------------------------")
+                    coords = FindTokenInElement(line_num,col_num,unit)
+
+                    if coords == None:
+                        print(line_num,col_num,"???")
+                        continue
+                        # coords = ((line_num,col_num),(line_num,col_num))
+
+                    if coords not in draw_tokens:
+                        draw_tokens[coords] = 0
+
+                    if self.time_process_box.isChecked():
+                        draw_tokens[coords] += fixation.duration
+                    else:
+                        draw_tokens[coords] += 1
+
+                if self.average_runs.isChecked():
+                    min_count = min(list(draw_tokens.values()))
+                    max_count = max(list(draw_tokens.values()))
+                    diff = max_count - min_count
+
+                    for coords in draw_tokens:
+                        val = draw_tokens[coords]
+                        draw_tokens[coords] = (val - min_count) / diff
+
+                    if file in output_data:
+                        output_data[file] = {k : draw_tokens.get(k,0) + output_data[file].get(k,0) for k in set(draw_tokens) | set(output_data[file]) }
+                    else:
+                        text_data[file] = src_str
+                        output_data[file] = draw_tokens
+                else:
+                    output_data[f"{file}-{session_id}-{fixation_run_id}"] = draw_tokens
+                    text_data[f"{file}-{session_id}-{fixation_run_id}"] = src_str
+
+        for file in output_data:
+            data = output_data[file]
 
             # Create blank file
-            file = unit.attrib["filename"].split("/")[-1]
-            src_str = xml_remover.sub('',ET.tostring(unit).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
-
-            lines = src_str.split("\n")
-            rows = len(lines)
-            cols = max([len(line.rstrip()) for line in lines])
-
-            height = rows * H
-            width = cols * W
-
             img = np.zeros((height,width,3), dtype=np.uint8)
             img.fill(255)
 
             img = Image.fromarray(img)
             draw = ImageDraw.Draw(img)
 
-            draw_tokens = {}
-            fixation_tups = self.idb.GetAllRunFixationsTargetingFile(fixation_run_id,target_file)
-            fixations = [Fixation(tup) for tup in fixation_tups]
-            print("FIXES:",len(fixations))
-            # fixations = [None]
-            for fixation in fixations:
-                line_num = fixation.source_file_line
-                col_num = fixation.source_file_col
-
-                if line_num == -1 or col_num == -1:
-                    continue
-
-                element = unit
-                #print((line_num,col_num),"->",FindTokenInElement(line_num,col_num,unit))
-                print("\n---------------------------------")
-                coords = FindTokenInElement(line_num,col_num,unit)
-
-                if coords == None:
-                    print(line_num,col_num,"???")
-                    continue
-                    # coords = ((line_num,col_num),(line_num,col_num))
-
-                if coords not in draw_tokens:
-                    draw_tokens[coords] = 0
-                # draw_tokens[coords] += 1
-                draw_tokens[coords] += fixation.duration
-
             start_color = self.startColor
             end_color = self.endColor
 
             num_of_colors = int(self.color_number_box.text())
 
-            # colors = [start_color]
-            # b_step,g_step,r_step = (end_color[0] - start_color[0]) / (num_of_colors - 1), (end_color[1] - start_color[1]) / (num_of_colors - 1), (end_color[2] - start_color[2]) / (num_of_colors - 1)
-            # for i in range(1,num_of_colors):
-            #     colors.append((int(start_color[0] + (b_step * i)), int(start_color[1] + (g_step * i)), int(start_color[2] + (r_step * i))))
             hsv_start = 270
             hsv_end = 0
             step = (hsv_end - hsv_start) / (num_of_colors - 1)
@@ -990,28 +1155,27 @@ class MyWidget(QtWidgets.QWidget):
             for i in range(0,num_of_colors):
                 rgb = colorsys.hsv_to_rgb((hsv_start + (step * i)) / 360,0.5,1)
                 colors.append((int(rgb[2]*255),int(rgb[1]*255),int(rgb[0]*255)))
-                print("RGB",(colors[-1][2],colors[-1][1],colors[-1][0]),step,i)
+                # print("RGB",(colors[-1][2],colors[-1][1],colors[-1][0]),step,i)
 
-            if len(list(draw_tokens.values())) != 0:
-                min_count = min(list(draw_tokens.values()))
-                max_count = max(list(draw_tokens.values()))
+            if len(list(data.values())) != 0:
+                min_count = min(list(data.values()))
+                max_count = max(list(data.values()))
                 step = (max_count - min_count) / (len(colors) - 1)
 
-                for coords in draw_tokens:
+                for coords in data:
                     pos = ((coords[0][1]-1)*W,(coords[0][0]-1)*H,(coords[1][1]*W)-1,(coords[1][0]*H)-1)
-                    count = draw_tokens[coords]
-                    print(pos)
-                    print("!",min_count,max_count,step,count)
+                    count = data[coords]
+                    # print(pos)
+                    # print("!",min_count,max_count,step,count)
                     # print(int((count - min_count) / step))
                     color = colors[int((count - min_count) / step) if step != 0 else -1]
                     
                     draw.rectangle(pos,fill=color)
 
-            print(colors)
-            draw.text((0,0),src_str,(0,0,0),font=font)
-            img = np.array(img)
+                draw.text((0,0),text_data[file],(0,0,0),font=font)
+                img = np.array(img)
 
-            cv2.imwrite(f"{output_folder_name}/{file}.png",img)
+                cv2.imwrite(f"{output_folder_name}/{file}.png",img)
 
         print("DONE!")
 

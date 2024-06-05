@@ -33,12 +33,28 @@ class iTraceDB:
             rtn.append(session[9] + " - " + str(session[0]))
         return rtn
 
+    # Get all the sessions from the database
+    def GetSessionsWithParticipantID(self):
+        sessions = self.cursor.execute("""SELECT * FROM session""").fetchall()
+        rtn = []
+        for session in sessions:
+            rtn.append(session[1] + " - " + session[9] + " - " + str(session[0]))
+        return rtn
+
     # Get all the fixation_runs from the selected session
     def GetFixationRuns(self, session_id):
         runs = self.cursor.execute("""SELECT * FROM fixation_run WHERE session_id = ?""",(session_id,)).fetchall()
         rtn = []
         for run in runs:
             rtn.append(run[3] + " - " + str(run[0]))
+        return rtn
+
+    # Get all the fixation_runs from the selected session with the session id listed
+    def GetFixationRunsWithSession(self, session_id):
+        runs = self.cursor.execute("""SELECT * FROM fixation_run WHERE session_id = ?""",(session_id,)).fetchall()
+        rtn = []
+        for run in runs:
+            rtn.append(f"{run[3]} - {str(run[0])} - {session_id}")
         return rtn
 
     # Get the length in seconds of the session
