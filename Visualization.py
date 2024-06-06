@@ -7,6 +7,8 @@ import math
 import re
 import random
 import colorsys
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from PIL import Image, ImageFont, ImageDraw
 
 from lxml import etree as ET
@@ -26,6 +28,11 @@ DEFAULT_GAZE_RADIUS = 5
 DEFAULT_FIXATION_RADIUS = 5
 DEFAULT_VID_SCALE = 1 # INCREASING THIS CAUSES THE VIDEO TO BECOME MUCH LONGER, AND HAVE MUCH MORE DETAIL
 DEFAULT_NUM_OF_COLORS = 5
+
+fontTitle = {'family':'serif','color':'black','size':20}
+fontTitle2 = {'family':'serif','color':'black','size':15}
+fontLabelX = {'family':'serif','color':'black','size':15}
+fontLabelY = {'family':'serif','color':'black','size':15}
 
 # Converts color string (rgb) to color tuple (bgr)
 def ConvertColorStringToTuple(color: "#XXXXXX") -> tuple[int]:
@@ -191,6 +198,20 @@ class ConfirmDialog(QtWidgets.QDialog):
         self.layout.addWidget(self.buttonBox)
         self.setLayout(self.layout)
 
+# class EntryDialog(QtWidgets.QDialog):
+#     def __init__(self,parent=None,title="Dialog"):
+#         super().__init__(parent)
+#         self.setWindowTitle(title)
+#         QBtn = QtWidgets.QDialogButtonBox.Apply | QtWidgets.QDialogButtonBox.Cancel
+#         self.buttonBox = QtWidgets.QDialogButtonBox(QBtn)
+#         self.buttonBox.accepted.connect(self.accept)
+#         self.buttonBox.rejected.connect(self.reject)
+
+#         self.layout = QtWidgets.QVBoxLayout()
+#         message = QtWidgets.QLabel(msg)
+#         self.layout.addWidget(message)
+#         self.layout.addWidget(self.buttonBox)
+#         self.setLayout(self.layout)
 
 class MyWidget(QtWidgets.QWidget):
     
@@ -202,7 +223,7 @@ class MyWidget(QtWidgets.QWidget):
         self.FIXATION_RADIUS = DEFAULT_FIXATION_RADIUS
         self.VID_SCALE = DEFAULT_VID_SCALE
 
-        self.setWindowTitle("iTrace Visualization")
+        self.setWindowTitle("iTrace Visualize")
         self.setMinimumHeight(WIN_HEIGHT)
         self.setMinimumWidth(WIN_WIDTH)
         self.setWindowIcon(QtGui.QIcon("Visualize.png"))
@@ -214,7 +235,7 @@ class MyWidget(QtWidgets.QWidget):
         self.video = None
         self.dejavu = None
         self.code_srcml = None
-        self.graph_srcml = None
+        # self.graph_srcml = None
 
         # Time variables
         self.selected_session_time = 0
@@ -413,20 +434,34 @@ class MyWidget(QtWidgets.QWidget):
 
         self.code_layout.setRowMinimumHeight(2,10)
 
+        # self.code_layout.setColumnMinimumWidth(0,150)
+
+        # Time Checkbox
         self.time_process_box = QtWidgets.QCheckBox("Process Time",self)
         self.time_process_box.setChecked(False)
         self.code_layout.addWidget(self.time_process_box,2,0)
 
-        self.average_runs = QtWidgets.QCheckBox("Average Runs",self)
+        # Average Checkbox
+        self.average_runs = QtWidgets.QCheckBox("Average the Runs",self)
         self.average_runs.setChecked(False)
+        self.average_runs.stateChanged.connect(self.averageCheckBoxToggle)
         self.code_layout.addWidget(self.average_runs,3,0)
+
+        # Normalize Average Checkbox
+        self.normalize_average_runs = QtWidgets.QCheckBox("Normalize the Runs",self)
+        self.normalize_average_runs.setChecked(False)
+        self.code_layout.addWidget(self.normalize_average_runs,4,0)
+        self.normalize_average_runs.setVisible(False)
+
+        self.code_layout.setColumnMinimumWidth(0,130)
+        self.code_layout.setRowMinimumHeight(4,25)
 
         # srcML Button
         self.code_srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
         self.code_srcml_load_button.clicked.connect(self.codeSrcmlButtonClicked)
         self.code_srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
-        self.code_layout.addWidget(self.code_srcml_load_button,5,0)
-        self.code_layout.addWidget(self.code_srcml_loaded_text,4,0)
+        self.code_layout.addWidget(self.code_srcml_load_button,6,0)
+        self.code_layout.addWidget(self.code_srcml_loaded_text,5,0)
 
 
         # Number of colors
@@ -454,6 +489,11 @@ class MyWidget(QtWidgets.QWidget):
         self.code_session_list_text = QtWidgets.QLabel("Sessions", self)
         self.code_layout.addWidget(self.code_session_list_text,0,3)
 
+        # Session Select All
+        self.code_session_select_all_button = QtWidgets.QPushButton("Select All",self)
+        self.code_session_select_all_button.clicked.connect(self.codeSelectAllSessions)
+        self.code_layout.addWidget(self.code_session_select_all_button,0,4)
+
         # Fixation Run List
         self.code_fixation_runs_list = QtWidgets.QListWidget(self)
         self.code_fixation_runs_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
@@ -461,6 +501,11 @@ class MyWidget(QtWidgets.QWidget):
         self.code_layout.addWidget(self.code_fixation_runs_list,1,13,10,10)
         self.code_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
         self.code_layout.addWidget(self.code_fixation_runs_list_text,0,13)
+
+        # Fixation Run Select All
+        self.code_fixation_run_select_all_button = QtWidgets.QPushButton("Select All",self)
+        self.code_fixation_run_select_all_button.clicked.connect(self.codeSelectAllFixationRuns)
+        self.code_layout.addWidget(self.code_fixation_run_select_all_button,0,14)
 
 
 
@@ -473,12 +518,12 @@ class MyWidget(QtWidgets.QWidget):
         self.graph_layout.addWidget(self.graph_db_load_button,1,0)
         self.graph_layout.addWidget(self.graph_db_loaded_text,0,0)
 
-        # srcML Button
-        self.graph_srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
-        self.graph_srcml_load_button.clicked.connect(self.graphSrcmlButtonClicked)
-        self.graph_srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
-        self.graph_layout.addWidget(self.graph_srcml_load_button,5,0)
-        self.graph_layout.addWidget(self.graph_srcml_loaded_text,4,0)
+        # # srcML Button
+        # self.graph_srcml_load_button = QtWidgets.QPushButton("Select srcML Archive", self)
+        # self.graph_srcml_load_button.clicked.connect(self.graphSrcmlButtonClicked)
+        # self.graph_srcml_loaded_text = QtWidgets.QLabel("No srcML Loaded",self)
+        # self.graph_layout.addWidget(self.graph_srcml_load_button,5,0)
+        # self.graph_layout.addWidget(self.graph_srcml_loaded_text,4,0)
 
         # Session List
         self.graph_session_list = QtWidgets.QListWidget(self)
@@ -488,6 +533,11 @@ class MyWidget(QtWidgets.QWidget):
         self.graph_session_list_text = QtWidgets.QLabel("Sessions", self)
         self.graph_layout.addWidget(self.graph_session_list_text,0,3)
 
+        # Session Select All
+        self.graph_session_select_all_button = QtWidgets.QPushButton("Select All",self)
+        self.graph_session_select_all_button.clicked.connect(self.graphSelectAllSessions)
+        self.graph_layout.addWidget(self.graph_session_select_all_button,0,4)
+
         # Fixation Run List
         self.graph_fixation_runs_list = QtWidgets.QListWidget(self)
         self.graph_fixation_runs_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
@@ -496,11 +546,43 @@ class MyWidget(QtWidgets.QWidget):
         self.graph_fixation_runs_list_text = QtWidgets.QLabel("Fixation Runs", self)
         self.graph_layout.addWidget(self.graph_fixation_runs_list_text,0,13)
 
+        # Fixation Run Select All
+        self.graph_fixation_run_select_all_button = QtWidgets.QPushButton("Select All",self)
+        self.graph_fixation_run_select_all_button.clicked.connect(self.graphSelectAllFixationRuns)
+        self.graph_layout.addWidget(self.graph_fixation_run_select_all_button,0,14)
 
-        self.graph_aoi_list = QtWidgets.QTabWidget(self)
-        self.graph_layout.addWidget(self.graph_aoi_list,1,26,10,10)
-        self.graph_aoi_list_text = QtWidgets.QLabel("Files", self)
-        self.graph_layout.addWidget(self.graph_aoi_list_text,0,26)
+        # ROI Tab Box
+        self.graph_roi_list = QtWidgets.QTabWidget(self)
+        self.graph_roi_list.setTabsClosable(True)
+        self.graph_roi_list.tabCloseRequested.connect(self.closeFileTab)
+        self.graph_layout.addWidget(self.graph_roi_list,2,26,9,10)
+        self.graph_roi_list_text = QtWidgets.QLabel("File ROIs", self)
+        self.graph_layout.addWidget(self.graph_roi_list_text,0,26,2,1)
+
+        # ROI Add File Button
+        self.graph_file_add_button = QtWidgets.QPushButton("Add File")
+        self.graph_file_add_button.clicked.connect(self.addFileTab)
+        self.graph_layout.addWidget(self.graph_file_add_button,0,27)
+
+        # ROI Add ROI Button
+        self.graph_roi_add_button = QtWidgets.QPushButton("Add ROI")
+        self.graph_roi_add_button.clicked.connect(self.addROI)
+        self.graph_layout.addWidget(self.graph_roi_add_button,0,28)
+
+        # ROI Load ROIs Button
+        self.graph_roi_load_button = QtWidgets.QPushButton("Load ROIs")
+        self.graph_roi_load_button.clicked.connect(self.loadROI)
+        self.graph_layout.addWidget(self.graph_roi_load_button,1,27)
+
+        # ROI Load ROIs Button
+        self.graph_roi_export_button = QtWidgets.QPushButton("Export ROIs")
+        self.graph_roi_export_button.clicked.connect(self.exportROI)
+        self.graph_layout.addWidget(self.graph_roi_export_button,1,28)
+
+        # Make Graphs Button
+        self.graph_make_graphs_button = QtWidgets.QPushButton("Generate Graphs")
+        self.graph_make_graphs_button.clicked.connect(self.generateGraphs)
+        self.graph_layout.addWidget(self.graph_make_graphs_button)
 
 
 
@@ -508,9 +590,6 @@ class MyWidget(QtWidgets.QWidget):
         self.tab_widget.addTab(self.video_tab,'Gaze Cloud Video')
         self.tab_widget.addTab(self.code_tab,'Tokenized Heatmap')
         self.tab_widget.addTab(self.graph_tab,'Graphs')
-
-
-
 
 
     def videoDatabaseButtonClicked(self): # Load Database
@@ -589,25 +668,24 @@ class MyWidget(QtWidgets.QWidget):
             display_name = display_name[:20]
         self.code_srcml_loaded_text.setText(display_name)
 
-    def graphSrcmlButtonClicked(self): # Load srcML
-        srcml_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open srcML Archive","","srcML Files (*.xml *.srcml)")[0]
-        if(srcml_file_path == ''):
-            return
-        try:
-            self.graph_srcml = ET.parse(srcml_file_path)
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", str(e))
-            return
-        print(self.graph_srcml.getroot().attrib)
-        if("filename" in self.graph_srcml.getroot().attrib):
-            QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
-            self.video = None
-            return
-        display_name = srcml_file_path.split("/")[-1]
-        if len(display_name) > 20:
-            display_name = display_name[:20]
-        self.graph_srcml_loaded_text.setText(display_name)
-        self.createFileTabs()
+    # def graphSrcmlButtonClicked(self): # Load srcML
+    #     srcml_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open srcML Archive","","srcML Files (*.xml *.srcml)")[0]
+    #     if(srcml_file_path == ''):
+    #         return
+    #     try:
+    #         self.graph_srcml = ET.parse(srcml_file_path)
+    #     except Exception as e:
+    #         QtWidgets.QMessageBox.critical(self, "Error", str(e))
+    #         return
+    #     print(self.graph_srcml.getroot().attrib)
+    #     if("filename" in self.graph_srcml.getroot().attrib):
+    #         QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
+    #         self.video = None
+    #         return
+    #     display_name = srcml_file_path.split("/")[-1]
+    #     if len(display_name) > 20:
+    #         display_name = display_name[:20]
+    #     self.graph_srcml_loaded_text.setText(display_name)
 
     def videoSessionLoadClicked(self, item):  # Select Session
         session_id = int(item.text().split(" - ")[1])
@@ -637,6 +715,30 @@ class MyWidget(QtWidgets.QWidget):
             self.code_fixation_runs_list.addItem(list_id)
             self.code_fixation_runs_list.addItems(fixation_runs)
 
+    def codeSelectAllSessions(self):
+        for item in [self.code_session_list.item(i) for i in range(self.code_session_list.count())]:
+            if not item.isSelected():
+                item.setSelected(True)
+                self.codeSessionLoadClicked(item)
+
+    def codeSelectAllFixationRuns(self):
+        for item in [self.code_fixation_runs_list.item(i) for i in range(self.code_fixation_runs_list.count())]:
+            if not item.isSelected():
+                item.setSelected(True)
+                self.codeFixationRunClicked(item)
+
+    def graphSelectAllSessions(self):
+        for item in [self.graph_session_list.item(i) for i in range(self.graph_session_list.count())]:
+            if not item.isSelected():
+                item.setSelected(True)
+                self.graphSessionLoadClicked(item)
+
+    def graphSelectAllFixationRuns(self):
+        for item in [self.graph_fixation_runs_list.item(i) for i in range(self.graph_fixation_runs_list.count())]:
+            if not item.isSelected():
+                item.setSelected(True)
+                self.graphFixationRunClicked(item)
+
     def graphSessionLoadClicked(self, item):  # Select Session
         particpant_id = item.text().split(" - ")[0]
         task_name = item.text().split(" - ")[1]
@@ -656,8 +758,6 @@ class MyWidget(QtWidgets.QWidget):
             self.graph_fixation_runs_list.addItem(list_id)
             self.graph_fixation_runs_list.addItems(fixation_runs)
 
-        if self.graph_srcml != None:
-            self.createFileTabs()
 
     def videoFixationRunClicked(self, item):  # Select Fixation Run (Doesn't currently do anything extra)
         pass
@@ -666,28 +766,243 @@ class MyWidget(QtWidgets.QWidget):
         if item.text().startswith("-----------") and item in self.code_fixation_runs_list.selectedItems():
             item.setSelected(False)
 
+    def averageCheckBoxToggle(self):
+        self.normalize_average_runs.setVisible(self.average_runs.isChecked())
+
     def graphFixationRunClicked(self, item):  
         if item.text().startswith("-----------") and item in self.graph_fixation_runs_list.selectedItems():
             item.setSelected(False)
 
-    def createFileTabs(self):
-        self.file_tabs = {}
+    def addFileTab(self,file):
+        if file == False:
+            file, ok = QtWidgets.QInputDialog.getText(self, "Add File for ROIs", "Enter file name", QtWidgets.QLineEdit.Normal, "")
+            if not ok:
+                return
 
-        sessions = self.graph_session_list.selectedItems()
-        if len(sessions) == 0:
+            if "." not in file:
+                dlg = ConfirmDialog(self, "Unusual File Name", "The supplied name does not resemble a file. Continue anyway?")
+                if dlg.exec():
+                    pass
+                else:
+                    return
+        print(file)
+        tab = QtWidgets.QWidget()
+
+        roi_list = QtWidgets.QListWidget(tab)
+        removeItem = lambda item : roi_list.takeItem(roi_list.row(item))
+        roi_list.itemDoubleClicked.connect(removeItem)
+
+        self.graph_roi_list.addTab(tab,file)
+        self.file_tabs[file] = {"tab":tab,"rois":roi_list}
+        self.graph_roi_list.setCurrentWidget(tab)
+
+    def closeFileTab(self,index):
+        del self.file_tabs[self.graph_roi_list.tabText(index)]
+        self.graph_roi_list.removeTab(index)
+
+
+    def addROI(self, lines):
+        if lines == False:
+            lines, ok = QtWidgets.QInputDialog.getText(self, "Add Region of Interest", "Enter start and end line numbers (inclusive):", QtWidgets.QLineEdit.Normal, "START,END")
+            if not ok:
+                return
+        try:
+            vals = [int(num) for num in lines.split(",")]
+            if len(vals) != 2:
+                QtWidgets.QMessageBox.critical(self, "Input Error", "Number of inputs must be 2")
+                return
+            elif vals[0] > vals[1]:
+                QtWidgets.QMessageBox.critical(self, "Input Error", "Start line must be less than or equal to end line")
+                return
+            elif vals[0] <= 0 or vals[1] <= 0:
+                QtWidgets.QMessageBox.critical(self, "Input Error", "Entered lines cannot be 0 or less")
+                return
+
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
             return
 
-        db_files = set()
-        for session in sessions:
-            db_files |= set([x[0].split("/")[-1] for x in self.graph_idb.GetFilesLookedAtBySession(session.text().split(" - ")[2])])
-        print(db_files)
-        # srcml_root = self.graph_srcml.getroot()
-        # units = {}
-        # for unit in srcml_root:
-        #     units[unit.attrib["filename"]] = unit
+        if self.graph_roi_list.currentWidget() == None:
+            QtWidgets.QMessageBox.critical(self, "Input Error", "No Files Added")
+            return
 
-        # files = [FindMatchingPath(list(units.keys()), file) for file in db_files]
-        # print(files)
+        # print(self.graph_roi_list.currentWidget())
+        # print(self.file_tabs)
+        rois = self.file_tabs[self.graph_roi_list.tabText(self.graph_roi_list.currentIndex())]["rois"]
+
+        insert = 0
+        for item in [rois.item(i) for i in range(rois.count())]:
+            start,end = [int(num) for num in item.text().split(",")]
+            if (vals[0] >= start and vals[0] <= end) or (vals[1] >= start and vals[1] <= end):
+                QtWidgets.QMessageBox.critical(self, "Input Error", "Entered lines cannot be within another ROI")
+                return
+            if vals[0] > start:
+                insert = rois.row(item)+1
+
+        print(insert)
+        rois.insertItem(insert,f"{vals[0]},{vals[1]}")
+        # rois.addItem(f"{vals[0]},{vals[1]}")
+
+    def loadROI(self):
+        roi_json_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Load ROIs","","JSON(*.json)")[0]
+        if roi_json_file_path == "":
+            return
+        try:
+            with open(roi_json_file_path,'r') as in_file:
+                data = eval(in_file.read())
+            print(data)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            return
+
+        self.file_tabs = {}
+        self.graph_roi_list.clear()
+        for file in data:
+            self.addFileTab(file)
+            self.graph_roi_list.setCurrentIndex(self.graph_roi_list.count()-1)
+            for lines in data[file]:
+                self.addROI(lines)
+
+    def exportROI(self):
+        output_file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self,"Export ROIs","","JSON(*.json)")
+        if output_file_name == "":
+            return
+        try:
+            with open(output_file_name,'w') as out_file:
+                out_file.write("{\n")
+                for file in self.file_tabs:
+                    out_file.write(f"    \"{file}\": [\n")
+                    rois_list = self.file_tabs[file]["rois"]
+                    for item in [rois_list.item(i) for i in range(rois_list.count())]:
+                        out_file.write(f"        \"{item.text()}\",\n")
+                    out_file.write("    ],\n")
+                out_file.write("}")
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            return
+
+    def generateGraphs(self):
+        output_folder_name = QtWidgets.QFileDialog.getExistingDirectory(self,"Open Directory")
+        if not output_folder_name:
+            return
+
+        rois = {}
+        timelines = {}
+        colors = {}
+
+        for file in self.file_tabs:
+            roi_list = self.file_tabs[file]["rois"]
+            rois[file] = {f"ROI_{i+1}":tuple([int(l) for l in roi_list.item(i).text().split(",")]) for i in range(roi_list.count())}
+            timelines[file] = {}
+            colors[file] = {"otherLine":"#D3E1E8","noROI":"#6D7477"}
+            for i in range(len(rois[file])):
+                rgb = colorsys.hsv_to_rgb(((i / (len(rois[file]) - 1)) if len(rois[file]) > 1 else 0) * (0.75),1,1)
+                colors[file][f"ROI_{i+1}"] = f"#{str(hex(int(rgb[0]*255)))[2:].zfill(2)}{str(hex(int(rgb[1]*255)))[2:].zfill(2)}{str(hex(int(rgb[2]*255)))[2:].zfill(2)}"
+
+        for fixation_run in self.graph_fixation_runs_list.selectedItems():
+            fixation_run_id = int(fixation_run.text().split(" - ")[1])
+            session_id = int(fixation_run.text().split(" - ")[2])
+            particpant_id = self.graph_idb.GetParticipantFromSessionID(session_id)
+            task_name = self.graph_idb.GetTaskFromSessionID(session_id)
+
+            dict_id = f"{particpant_id}-{task_name}-{fixation_run_id}"
+            print(dict_id)
+            for file in timelines:
+                timelines[file][dict_id] = []
+
+
+            fixations = [Fixation(tup) for tup in self.graph_idb.GetAllRunFixations(fixation_run_id)]
+            # print(1,set([file[0] for file in self.graph_idb.GetFilesLookedAtBySession(session_id)]))
+            # print(2,set([file for file in timelines]))
+            target_files = set([file[0] for file in self.graph_idb.GetFilesLookedAtBySession(session_id)]) & set([file for file in timelines])
+            print(f"\t{target_files}")
+            # print(3,target_files)
+            for i in range(len(fixations)):
+                fixation = fixations[i]
+                looked_file = fixation.fixation_target
+
+                for target_file in target_files:
+                    if looked_file == target_file:
+                        for roi_id in rois[target_file]:
+                            roi = rois[target_file][roi_id]
+                            line = fixation.source_file_line
+                            if line >= roi[0] and line <= roi[1]:
+                                region = roi_id
+                                break
+                        else:
+                            region = "otherLine"
+                    else:
+                        region = "noROI"
+
+                    duration = fixation.duration
+
+                    if len(timelines[target_file][dict_id]) == 0:
+                        timelines[target_file][dict_id].append({region:duration})
+                    elif list(timelines[target_file][dict_id][-1].keys())[0] == region:
+                        diff = ConvertWindowsTime(fixation.fixation_start_event_time) - (ConvertWindowsTime(fixations[i-1].fixation_start_event_time) + fixations[i-1].duration)
+                        timelines[target_file][dict_id][-1][region] += diff + duration
+                    elif region == "noROI" and list(timelines[target_file][dict_id][-1].keys())[0] != "noROI":
+                        diff = ConvertWindowsTime(fixation.fixation_start_event_time) - (ConvertWindowsTime(fixations[i-1].fixation_start_event_time) + fixations[i-1].duration)
+                        timelines[target_file][dict_id].append({region:diff+duration})
+                    elif region != "noROI" and list(timelines[target_file][dict_id][-1].keys())[0] == "noROI":
+                        diff = ConvertWindowsTime(fixation.fixation_start_event_time) - (ConvertWindowsTime(fixations[i-1].fixation_start_event_time) + fixations[i-1].duration)
+                        timelines[target_file][dict_id][-1]["noROI"] += diff
+                        timelines[target_file][dict_id].append({region:duration})
+                    elif region != "noROI" and list(timelines[target_file][dict_id][-1].keys())[0] != "noROI":
+                        diff = ConvertWindowsTime(fixation.fixation_start_event_time) - (ConvertWindowsTime(fixations[i-1].fixation_start_event_time) + fixations[i-1].duration)
+                        timelines[target_file][dict_id].append({"noROI":diff})
+                        timelines[target_file][dict_id].append({region:duration})
+
+        # print(timelines)
+        print(rois)
+        for file in timelines:
+            # print("Drawing",file)
+            # print(rois[file])
+            plt.clf()
+            plt.close()
+            plt.figure(figsize=(25,10))
+
+            for run_id in timelines[file]:
+                # print(f"\t{run_id}")
+                # print(timelines[file][run_id])
+                y = [run_id]
+                barList = []
+                barColorsList = []
+                totalTime = 0
+                if len(timelines[file][run_id]) == 0:
+                    continue
+                for zone in timelines[file][run_id]:
+                    region = list(zone.keys())[0]
+                    barList.append(zone[region])
+                    barColorsList.append(region)
+                    totalTime += zone[region]
+                if len(barList) > 0:
+                    plt.barh(y,barList[0],color = colors[file][barColorsList[0]],height = 0.3)
+                    leftStackValue = barList[0]
+                    for i in range(1, len(barList)):
+                        plt.barh(y,barList[i], left = leftStackValue ,color = colors[file][barColorsList[i]],height = 0.3, label=barColorsList[i])
+                        leftStackValue += barList[i]
+            plt.title("Session Timeline", fontdict = fontTitle, loc="center")
+            plt.title(f"File: {file}", fontdict = fontTitle, loc="left")
+            plt.ylabel("Run ID", fontdict = fontLabelY)
+            plt.xlabel("Time in milliseconds", fontdict = fontLabelX)
+            plt.grid(axis='x',alpha=1)
+            legends = []
+            for region in rois[file]:
+                if len(rois[file][region]) > 0:
+                    legends.append(mpatches.Patch(color = colors[file][region], label=region))
+            legends.append(mpatches.Patch(color = colors[file]["noROI"], label="Outside Lines"))
+            legends.append(mpatches.Patch(color = colors[file]["otherLine"], label="Other Line"))
+            plt.legend(handles=legends)
+            plt.savefig(f"{output_folder_name}/graphTimeline-{file}.png")
+            plt.close()
+
+        print("Done!")
+
+
+
+
+
 
 
 
@@ -1118,11 +1433,12 @@ class MyWidget(QtWidgets.QWidget):
                 if self.average_runs.isChecked():
                     min_count = min(list(draw_tokens.values()))
                     max_count = max(list(draw_tokens.values()))
-                    diff = max_count - min_count
+                    diff = max_count - min_count if max_count != min_count else max_count
 
-                    for coords in draw_tokens:
-                        val = draw_tokens[coords]
-                        draw_tokens[coords] = (val - min_count) / diff
+                    if self.normalize_average_runs.isChecked():
+                        for coords in draw_tokens:
+                            val = draw_tokens[coords]
+                            draw_tokens[coords] = (val - min_count) / diff
 
                     if file in output_data:
                         output_data[file] = {k : draw_tokens.get(k,0) + output_data[file].get(k,0) for k in set(draw_tokens) | set(output_data[file]) }
