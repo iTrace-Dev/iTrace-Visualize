@@ -1369,6 +1369,7 @@ class MyWidget(QtWidgets.QWidget):
             # At 28 Font size, bounding boxes are 17x28
             #    32 Font size, bounding boxes are 19x31
             font = ImageFont.truetype("cour.ttf",32)
+            label_font = ImageFont.truetype("cour.ttf",24)
             W = 19
             H = 31
 
@@ -1391,14 +1392,6 @@ class MyWidget(QtWidgets.QWidget):
                 file = unit.attrib["filename"].split("/")[-1]
                 src_str = xml_remover.sub('',ET.tostring(unit).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
 
-                lines = src_str.split("\n")
-                rows = len(lines)
-                cols = max([len(line.rstrip()) for line in lines])
-
-                height = rows * H
-                width = cols * W
-
-                
 
                 draw_tokens = {}
                 fixation_tups = self.code_idb.GetAllRunFixationsTargetingFile(fixation_run_id,target_file)
@@ -1413,8 +1406,7 @@ class MyWidget(QtWidgets.QWidget):
                         continue
 
                     element = unit
-                    #print((line_num,col_num),"->",FindTokenInElement(line_num,col_num,unit))
-                    # print("\n---------------------------------")
+
                     coords = FindTokenInElement(line_num,col_num,unit)
 
                     if coords == None:
@@ -1451,6 +1443,14 @@ class MyWidget(QtWidgets.QWidget):
 
         for file in output_data:
             data = output_data[file]
+            src_str = text_data[file]
+
+            lines = src_str.split("\n")
+            rows = len(lines)
+            cols = max([len(line.rstrip()) for line in lines])
+
+            height = rows * H
+            width = cols * W
 
             # Create blank file
             img = np.zeros((height,width,3), dtype=np.uint8)
@@ -1476,7 +1476,7 @@ class MyWidget(QtWidgets.QWidget):
             if len(list(data.values())) != 0:
                 min_count = min(list(data.values()))
                 max_count = max(list(data.values()))
-                step = (max_count - min_count) / (len(colors) - 1)
+                step = (max_count - min_count) / num_of_colors
 
                 for coords in data:
                     pos = ((coords[0][1]-1)*W,(coords[0][0]-1)*H,(coords[1][1]*W)-1,(coords[1][0]*H)-1)
@@ -1484,14 +1484,34 @@ class MyWidget(QtWidgets.QWidget):
                     # print(pos)
                     # print("!",min_count,max_count,step,count)
                     # print(int((count - min_count) / step))
-                    color = colors[int((count - min_count) / step) if step != 0 else -1]
+                    color = colors[int((count - min_count) / step) if step != 0 else -1] if count != max_count else colors[-1]
                     
                     draw.rectangle(pos,fill=color)
 
-                draw.text((0,0),text_data[file],(0,0,0),font=font)
+                draw.text((0,0),src_str,(0,0,0),font=font)
+
+                legend_width = int(width * (1/3))
+                # for color in colors:
+                # draw.rectangle((height - 100, width - 350,height-50,width-50),fill=(0,0,0))
+                draw.rectangle((width - (legend_width - 50),height - 100,width-50, height-50),fill=(0,0,0))
+                start_x = width - (legend_width + 50)
+                length_step = legend_width / len(colors)
+                val = min_count
+                for i in range(len(colors)):
+                    draw.rectangle((start_x,height - 100, start_x + length_step, height - 50),fill=colors[i])
+                    _,_,w,h = draw.textbbox((0,0),str(int(val)),font=label_font)
+                    draw.text((start_x - (w/2),(height-25)-(h/2)),str(int(val)),(0,0,0),font=label_font)
+                    start_x += length_step
+                    val += step
+                _,_,w,h = draw.textbbox((0,0),str(max_count),font=label_font)
+                draw.text((start_x - (w/2),(height-25)-(h/2)),str(max_count),(0,0,0),font=label_font)
+
+
+
                 img = np.array(img)
 
                 cv2.imwrite(f"{output_folder_name}/{file}.png",img)
+
 
         print("DONE!")
 
