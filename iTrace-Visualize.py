@@ -141,7 +141,6 @@ def GetTokenStartPoint(line_start,col_start,elements):
 
 SINGLE_CHAR_TOKENS = ["{","}","[","]","(",")","'",'"',".",",",";"]
 def FindTokenInElement(line,col,element):
-    # print("*",line,col)
     xml_remover = re.compile("<.*?>")
     text = xml_remover.sub('',ET.tostring(element).decode()).replace("&gt;",">").replace("&lt;","<").replace("&amp;","&")
     lines = text.split("\n")
@@ -164,8 +163,6 @@ def FindTokenInElement(line,col,element):
     start = col - 1
     end = col - 1
 
-    # print("|"+char+"|",mode,token_line)
-
     while token_line[start].isalnum() if mode == "word" else ((not token_line[start].isalnum()) and (not token_line[start].isspace()) and (token_line[start] not in SINGLE_CHAR_TOKENS)):
         start -= 1
         if start < 0:
@@ -177,7 +174,7 @@ def FindTokenInElement(line,col,element):
         if end > len(token_line) - 1:
             end = len(token_line)
             break
-    # print("|"+str(line),str(start),str(end)+"|")
+
     return ((line,start+2),(line,end))
 
 
@@ -658,7 +655,6 @@ class MyWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
             return
-        print(self.code_srcml.getroot().attrib)
         if("filename" in self.code_srcml.getroot().attrib):
             QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
             self.video = None
@@ -667,25 +663,6 @@ class MyWidget(QtWidgets.QWidget):
         if len(display_name) > 20:
             display_name = display_name[:20]
         self.code_srcml_loaded_text.setText(display_name)
-
-    # def graphSrcmlButtonClicked(self): # Load srcML
-    #     srcml_file_path = QtWidgets.QFileDialog.getOpenFileName(self, "Open srcML Archive","","srcML Files (*.xml *.srcml)")[0]
-    #     if(srcml_file_path == ''):
-    #         return
-    #     try:
-    #         self.graph_srcml = ET.parse(srcml_file_path)
-    #     except Exception as e:
-    #         QtWidgets.QMessageBox.critical(self, "Error", str(e))
-    #         return
-    #     print(self.graph_srcml.getroot().attrib)
-    #     if("filename" in self.graph_srcml.getroot().attrib):
-    #         QtWidgets.QMessageBox.critical(self, "srcML Error", "The provided srcML file is not an archive file")
-    #         self.video = None
-    #         return
-    #     display_name = srcml_file_path.split("/")[-1]
-    #     if len(display_name) > 20:
-    #         display_name = display_name[:20]
-    #     self.graph_srcml_loaded_text.setText(display_name)
 
     def videoSessionLoadClicked(self, item):  # Select Session
         session_id = int(item.text().split(" - ")[1])
@@ -704,7 +681,6 @@ class MyWidget(QtWidgets.QWidget):
         selected = self.code_session_list.selectedItems()
         fixation_runs = self.code_idb.GetFixationRunsWithSession(session_id)
         list_id = f"----------- {particpant_id} - {task_name} -----------"
-        print(self.code_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly))
         if item not in selected:
             self.code_fixation_runs_list.takeItem(self.code_fixation_runs_list.row(self.code_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly)[0]))
 
@@ -747,7 +723,6 @@ class MyWidget(QtWidgets.QWidget):
         selected = self.graph_session_list.selectedItems()
         fixation_runs = self.graph_idb.GetFixationRunsWithSession(session_id)
         list_id = f"----------- {particpant_id} - {task_name} -----------"
-        print(self.graph_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly))
         if item not in selected:
             self.graph_fixation_runs_list.takeItem(self.graph_fixation_runs_list.row(self.graph_fixation_runs_list.findItems(list_id,QtCore.Qt.MatchExactly)[0]))
 
@@ -785,7 +760,7 @@ class MyWidget(QtWidgets.QWidget):
                     pass
                 else:
                     return
-        print(file)
+
         tab = QtWidgets.QWidget()
 
         roi_list = QtWidgets.QListWidget(tab)
@@ -953,18 +928,12 @@ class MyWidget(QtWidgets.QWidget):
                         timelines[target_file][dict_id].append({"noROI":diff})
                         timelines[target_file][dict_id].append({region:duration})
 
-        # print(timelines)
-        print(rois)
         for file in timelines:
-            # print("Drawing",file)
-            # print(rois[file])
             plt.clf()
             plt.close()
             plt.figure(figsize=(25,10))
 
             for run_id in timelines[file]:
-                # print(f"\t{run_id}")
-                # print(timelines[file][run_id])
                 y = [run_id]
                 barList = []
                 barColorsList = []
@@ -977,10 +946,10 @@ class MyWidget(QtWidgets.QWidget):
                     barColorsList.append(region)
                     totalTime += zone[region]
                 if len(barList) > 0:
-                    plt.barh(y,barList[0],color = colors[file][barColorsList[0]],height = 0.3)
+                    plt.barh(y,barList[0],color = colors[file][barColorsList[0]],height = 0.5)
                     leftStackValue = barList[0]
                     for i in range(1, len(barList)):
-                        plt.barh(y,barList[i], left = leftStackValue ,color = colors[file][barColorsList[i]],height = 0.3, label=barColorsList[i])
+                        plt.barh(y,barList[i], left = leftStackValue ,color = colors[file][barColorsList[i]],height = 0.5, label=barColorsList[i])
                         leftStackValue += barList[i]
             plt.title("Session Timeline", fontdict = fontTitle, loc="center")
             plt.title(f"File: {file}", fontdict = fontTitle, loc="left")
@@ -990,9 +959,9 @@ class MyWidget(QtWidgets.QWidget):
             legends = []
             for region in rois[file]:
                 if len(rois[file][region]) > 0:
-                    legends.append(mpatches.Patch(color = colors[file][region], label=region))
-            legends.append(mpatches.Patch(color = colors[file]["noROI"], label="Outside Lines"))
-            legends.append(mpatches.Patch(color = colors[file]["otherLine"], label="Other Line"))
+                    legends.append(mpatches.Patch(color = colors[file][region], label=f"{region}: {rois[file][region][0]}-{rois[file][region][1]}"))
+            legends.append(mpatches.Patch(color = colors[file]["noROI"], label="Off-screen/In Other File"))
+            legends.append(mpatches.Patch(color = colors[file]["otherLine"], label="Non-ROI Line"))
             plt.legend(handles=legends)
             plt.savefig(f"{output_folder_name}/graphTimeline-{file}.png")
             plt.close()
@@ -1379,12 +1348,9 @@ class MyWidget(QtWidgets.QWidget):
                 units[unit.attrib["filename"]] = unit
 
             gazed_files = [x[0] for x in self.code_idb.GetFilesLookedAtBySession(session_id)]
-            print(gazed_files)
 
             for target_file in gazed_files:
-                print(target_file)
                 unit_target = FindMatchingPath(list(units.keys()),target_file)
-                print(target_file,"->",unit_target)
                 if unit_target == None:
                     continue
                 unit = units[unit_target]
@@ -1396,7 +1362,6 @@ class MyWidget(QtWidgets.QWidget):
                 draw_tokens = {}
                 fixation_tups = self.code_idb.GetAllRunFixationsTargetingFile(fixation_run_id,target_file)
                 fixations = [Fixation(tup) for tup in fixation_tups]
-                print("FIXES:",len(fixations))
                 # fixations = [None]
                 for fixation in fixations:
                     line_num = fixation.source_file_line
@@ -1410,7 +1375,6 @@ class MyWidget(QtWidgets.QWidget):
                     coords = FindTokenInElement(line_num,col_num,unit)
 
                     if coords == None:
-                        print(line_num,col_num,"???")
                         continue
                         # coords = ((line_num,col_num),(line_num,col_num))
 
@@ -1471,7 +1435,6 @@ class MyWidget(QtWidgets.QWidget):
             for i in range(0,num_of_colors):
                 rgb = colorsys.hsv_to_rgb((hsv_start + (step * i)) / 360,0.5,1)
                 colors.append((int(rgb[2]*255),int(rgb[1]*255),int(rgb[0]*255)))
-                # print("RGB",(colors[-1][2],colors[-1][1],colors[-1][0]),step,i)
 
             if len(list(data.values())) != 0:
                 min_count = min(list(data.values()))
@@ -1481,9 +1444,6 @@ class MyWidget(QtWidgets.QWidget):
                 for coords in data:
                     pos = ((coords[0][1]-1)*W,(coords[0][0]-1)*H,(coords[1][1]*W)-1,(coords[1][0]*H)-1)
                     count = data[coords]
-                    # print(pos)
-                    # print("!",min_count,max_count,step,count)
-                    # print(int((count - min_count) / step))
                     color = colors[int((count - min_count) / step) if step != 0 else -1] if count != max_count else colors[-1]
                     
                     draw.rectangle(pos,fill=color)
