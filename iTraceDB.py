@@ -33,12 +33,28 @@ class iTraceDB:
             rtn.append(session[9] + " - " + str(session[0]))
         return rtn
 
+    # Get all the sessions from the database
+    def GetSessionsWithParticipantID(self):
+        sessions = self.cursor.execute("""SELECT * FROM session""").fetchall()
+        rtn = []
+        for session in sessions:
+            rtn.append(session[1] + " - " + session[9] + " - " + str(session[0]))
+        return rtn
+
     # Get all the fixation_runs from the selected session
     def GetFixationRuns(self, session_id):
         runs = self.cursor.execute("""SELECT * FROM fixation_run WHERE session_id = ?""",(session_id,)).fetchall()
         rtn = []
         for run in runs:
             rtn.append(run[3] + " - " + str(run[0]))
+        return rtn
+
+    # Get all the fixation_runs from the selected session with the session id listed
+    def GetFixationRunsWithSession(self, session_id):
+        runs = self.cursor.execute("""SELECT * FROM fixation_run WHERE session_id = ?""",(session_id,)).fetchall()
+        rtn = []
+        for run in runs:
+            rtn.append(f"{run[3]} - {str(run[0])} - {session_id}")
         return rtn
 
     # Get the length in seconds of the session
@@ -59,6 +75,11 @@ class iTraceDB:
     def GetAllRunFixations(self, run_id):
         return self.cursor.execute("""SELECT * FROM fixation WHERE fixation_run_id = ? ORDER BY fixation_start_event_time""", (run_id,)).fetchall()
 
+    # Returns all the fixations from a fixation run and on a certain file
+    def GetAllRunFixationsTargetingFile(self, run_id,target_file):
+        return self.cursor.execute("""SELECT * FROM fixation WHERE fixation_run_id = ? and fixation_target = ? ORDER BY fixation_start_event_time""", (run_id,target_file)).fetchall()
+
+
     # Returns a dictionary of fixation_gazes for the selected fixation_run
     def GetAllFixationGazes(self,fixations):
         all_fix_gazes = {}
@@ -69,6 +90,16 @@ class iTraceDB:
     # Returns the gaze that happened at a specified event_time
     def GetGazeFromEventTime(self,event_time):
         return self.cursor.execute("""SELECT * FROM gaze WHERE event_time = ?""", (event_time,)).fetchall()[0]
+
+    def GetFilesLookedAtBySession(self,session_id):
+        return self.cursor.execute("""SELECT DISTINCT fixation_target FROM fixation INNER JOIN gaze ON fixation.fixation_start_event_time = gaze.event_time WHERE session_id = ?""", (session_id,)).fetchall()
+
+    def GetParticipantFromSessionID(self,session_id):
+        return self.cursor.execute("""SELECT participant_id FROM session WHERE session_id = ?""", (session_id,)).fetchall()[0][0]
+
+    def GetTaskFromSessionID(self,session_id):
+        return self.cursor.execute("""SELECT task_name FROM session WHERE session_id = ?""", (session_id,)).fetchall()[0][0]
+
 
     # Gets the session from a fixation run
     #def GetSessionOfFixationRun(self,run_id):
